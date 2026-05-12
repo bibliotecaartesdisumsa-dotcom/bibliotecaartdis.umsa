@@ -1,0 +1,375 @@
+# views/libro_views.py
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.http import JsonResponse, HttpResponse
+from django.core.paginator import Paginator
+from django.core.files.storage import FileSystemStorage
+from django.views.decorators.csrf import csrf_exempt
+from django.db import IntegrityError
+import logging
+
+from ..decorators import admin_required
+from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
+from ..forms import RevistaForm, ColeccionForm, ImagenForm
+
+logger = logging.getLogger(__name__)
+
+# ==================== CRUD Libros ====================
+@login_required
+@admin_required
+def listar_libros(request):
+    libros = Libro.objects.all()
+    if request.GET.get('ordenar') == 'fecha_asc':
+        libros = libros.order_by('fecha_publicacion')
+    elif request.GET.get('ordenar') == 'fecha_desc':
+        libros = libros.order_by('-fecha_publicacion')
+    else:
+        libros = libros.order_by('-id_libro')
+    paginator = Paginator(libros, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'listar_libros.html', {'libros': page_obj, 'usuario': request.user})
+
+@admin_required
+def agregar_libro(request):
+    autores = Autor.objects.all()
+    categorias = Categoria.objects.all()
+    if request.method == 'POST':
+        try:
+            titulo = request.POST.get('titulo')
+            edicion = request.POST.get('edicion')
+            tipo = request.POST.get('tipo')
+            categoria = request.POST.get('categoria')
+            descripcion = request.POST.get('descripcion', '').strip()
+            autores_seleccionados = request.POST.getlist('autores')
+            palabras_claves = request.POST.get('palabras_claves', '').split(',')
+            pdf_url = request.POST.get('pdf_url')
+            categorias_seleccionadas = request.POST.getlist('categorias')
+            
+            nuevo_libro = Libro(
+                titulo=titulo, edicion=edicion, tipo=tipo, categoria=categoria,
+                descripcion=descripcion, pdf_url=pdf_url
+            )
+            if 'portada' in request.FILES:
+                nuevo_libro.img_portada = request.FILES['portada']
+            if 'pdf' in request.FILES:
+                nuevo_libro.pdf = request.FILES['pdf']
+            if 'autorizacion' in request.FILES:
+                nuevo_libro.archivo_autorizacion = request.FILES['autorizacion']
+            nuevo_libro.save()
+
+            nuevo_autor_nombre = request.POST.get('nombre_autor')
+            if nuevo_autor_nombre and nuevo_autor_nombre.strip():
+                autor_existente = Autor.objects.filter(nombre=nuevo_autor_nombre).first()
+                if autor_existente:
+                    nuevo_libro.autores.add(autor_existente)
+                else:
+                    nuevo_autor = Autor.objects.create(nombre=nuevo_autor_nombre)
+                    nuevo_libro.autores.add(nuevo_autor)
+
+            for autor_id in autores_seleccionados:
+                try:
+                    autor = Autor.objects.get(pk=autor_id)
+                    nuevo_libro.autores.add(autor)
+                except:
+                    pass
+            for categoria_id in categorias_seleccionadas:
+                try:
+                    cat = Categoria.objects.get(pk=categoria_id)
+                    nuevo_libro.categorias.add(cat)
+                except:
+                    pass
+            for palabra in palabras_claves:
+                if palabra.strip():
+                    nuevo_libro.agregar_palabras_claves(palabra.strip())
+            return JsonResponse({'success': True, 'message': 'Libro agregado', 'libro_id': nuevo_libro.id_libro})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    context = {'autores': autores, 'categorias': categorias}
+    return render(request, 'agregar_libro.html', context)
+
+@login_required
+@admin_required
+def editar_libro(request, libro_id):
+    libro = get_object_or_404(Libro, id_libro=libro_id)
+    if request.method == 'POST':
+        try:
+            libro.titulo = request.POST.get('titulo').strip()
+            libro.edicion = request.POST.get('edicion', '').strip()
+            libro.tipo = request.POST.get('tipo')
+            libro.descripcion = request.POST.get('descripcion', '').strip()
+            libro.categoria = request.POST.get('categoria')
+            libro.categorias.set(request.POST.getlist('categorias'))
+            if 'pdf' in request.FILES:
+                libro.pdf = request.FILES['pdf']
+                libro.pdf_url = ''
+            else:
+                libro.pdf_url = request.POST.get('pdf_url', '').strip()
+            if 'portada' in request.FILES:
+                libro.img_portada = request.FILES['portada']
+            if 'autorizacion' in request.FILES:
+                libro.archivo_autorizacion = request.FILES['autorizacion']
+            if 'autores' in request.POST:
+                autores = request.POST.getlist('autores')
+                if autores:
+                    libro.autores.set(autores)
+                else:
+                    libro.autores.clear()
+            libro.palabra_clave = request.POST.get('palabras_claves', '')
+            libro.save()
+            return JsonResponse({'success': True, 'message': 'Libro actualizado'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    context = {
+        'libro': libro,
+        'autores': Autor.objects.all(),
+        'categorias': Categoria.objects.all(),
+        'palabras_claves': libro.palabra_clave.split(',') if libro.palabra_clave else []
+    }
+    return render(request, 'editar_libro.html', context)
+
+@login_required
+def eliminar_libro(request, libro_id):
+    libro = get_object_or_404(Libro, pk=libro_id)
+    if request.method == 'POST':
+        libro.delete()
+        return redirect('listar_libros')
+
+@login_required
+def cambiar_estado_descarga(request, libro_id):
+    libro = get_object_or_404(Libro, id_libro=libro_id)
+    libro.descarga_autorizada = not libro.descarga_autorizada
+    libro.save()
+    return redirect('listar_libros')
+
+@login_required
+def eliminar_autorizacion(request, libro_id):
+    libro = get_object_or_404(Libro, id_libro=libro_id)
+    if request.method == 'POST' and libro.archivo_autorizacion:
+        libro.archivo_autorizacion.delete(save=False)
+        libro.archivo_autorizacion = None
+        libro.save()
+        return JsonResponse({'success': True, 'message': 'Autorización eliminada'})
+    return JsonResponse({'success': False, 'message': 'No hay autorización'}, status=405)
+
+# ==================== CRUD Revistas ====================
+@login_required
+@admin_required
+def listar_revistas(request):
+    revistas = Revista.objects.all()
+    colecciones = Coleccion.objects.all()
+    return render(request, 'listar_revistas.html', {'revistas': revistas, 'colecciones': colecciones})
+
+@login_required
+@admin_required
+def agregar_revista(request):
+    if request.method == 'POST':
+        try:
+            if not request.POST.get('coleccion'):
+                raise ValueError('La colección es requerida')
+            coleccion = Coleccion.objects.get(id_coleccion=request.POST['coleccion'])
+            nro_revista = request.POST.get('nro_revista')
+            nro_revista = int(nro_revista) if nro_revista else None
+            if not request.FILES.get('img_portada'):
+                raise ValueError('La imagen de portada es requerida')
+            revista = Revista(
+                nro_revista=nro_revista,
+                coleccion=coleccion,
+                descripcion=request.POST.get('descripcion', '').strip(),
+                img_portada=request.FILES.get('img_portada'),
+                pdf=request.FILES.get('pdf'),
+                url=request.POST.get('url', '').strip()
+            )
+            revista.save()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True, 'message': 'Revista agregada', 'id': revista.id_revista})
+            messages.success(request, 'Revista agregada')
+            return redirect('listar_revistas')
+        except Exception as e:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'message': str(e)}, status=400)
+            messages.error(request, str(e))
+            return redirect('agregar_revista')
+    colecciones = Coleccion.objects.all().order_by('nomb_colecc')
+    return render(request, 'agregar_revista.html', {'colecciones': colecciones, 'max_upload_size_mb': {'imagen': 5, 'pdf': 10}})
+
+@login_required
+@admin_required
+def modificar_revista(request, id_revista):
+    revista = get_object_or_404(Revista, id_revista=id_revista)
+    if request.method == 'POST':
+        form = RevistaForm(request.POST, request.FILES, instance=revista)
+        if form.is_valid():
+            try:
+                revista = form.save()
+                return JsonResponse({'success': True, 'message': 'Revista actualizada', 'data': {'id': revista.id_revista}})
+            except Exception as e:
+                return JsonResponse({'success': False, 'message': str(e)}, status=500)
+        else:
+            return JsonResponse({'success': False, 'message': 'Errores en formulario', 'errors': form.errors}, status=400)
+    form = RevistaForm(instance=revista)
+    return render(request, 'modificar_revista.html', {'form': form, 'revista': revista, 'max_upload_size_mb': {'imagen': 5, 'pdf': 10}})
+
+@login_required
+@admin_required
+def eliminar_revista(request, id_revista):
+    if request.method == 'POST':
+        revista = get_object_or_404(Revista, id_revista=id_revista)
+        revista.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False})
+
+@login_required
+@admin_required
+def agregar_coleccion(request):
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        try:
+            nueva_coleccion = Coleccion.objects.create(
+                nomb_colecc=request.POST.get('nomb_colecc'),
+                descripcion=request.POST.get('descripcion')
+            )
+            return JsonResponse({'success': True, 'id_coleccion': nueva_coleccion.id_coleccion, 'nomb_colecc': nueva_coleccion.nomb_colecc})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+    return JsonResponse({'success': False, 'message': 'Método no permitido'})
+
+@login_required
+@admin_required
+def modificar_coleccion(request, id_coleccion):
+    coleccion = get_object_or_404(Coleccion, id_coleccion=id_coleccion)
+    if request.method == 'POST':
+        form = ColeccionForm(request.POST, instance=coleccion)
+        if form.is_valid():
+            form.save()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True, 'message': 'Colección actualizada'})
+            return redirect('listar_revistas')
+        else:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'message': 'Error', 'errors': form.errors})
+    else:
+        form = ColeccionForm(instance=coleccion)
+    return render(request, 'modificar_coleccion.html', {'form': form, 'coleccion': coleccion})
+
+@login_required
+@admin_required
+def eliminar_coleccion(request, id_coleccion):
+    if request.method == 'POST':
+        coleccion = get_object_or_404(Coleccion, id_coleccion=id_coleccion)
+        coleccion.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False})
+
+@csrf_exempt
+@admin_required
+def actualizar_orden_colecciones(request):
+    if request.method == 'POST':
+        coleccion_ids = request.POST.getlist('coleccion_ids[]')
+        for index, coleccion_id in enumerate(coleccion_ids):
+            Coleccion.objects.filter(id_coleccion=coleccion_id).update(orden=index)
+        return JsonResponse({'status': 'success'})
+    return JsonResponse({'status': 'error'}, status=400)
+
+# ==================== CRUD Imágenes ====================
+@login_required
+@admin_required
+def listar_imagenes(request):
+    imagenes = Imagen.objects.all().order_by('-id_Imagen')
+    paginator = Paginator(imagenes, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'lista_imagenes.html', {'page_obj': page_obj})
+
+@admin_required
+def agregar_imagen(request):
+    categorias = Categoria.objects.all()
+    if request.method == 'POST':
+        try:
+            titulo = request.POST.get('titulo')
+            descripcion = request.POST.get('descripcion', '')
+            autorImg = request.POST.get('autorImg')
+            img_portada = request.FILES['img_portada']
+            pdf = request.FILES.get('pdf', None)
+            marca_agua = request.POST.get('marca_agua', '')
+            fs = FileSystemStorage()
+            img_portada_name = fs.save(img_portada.name, img_portada)
+            pdf_name = fs.save(pdf.name, pdf) if pdf else None
+            nueva_imagen = Imagen(
+                titulo=titulo, descripcion=descripcion, autorImg=autorImg,
+                img_portada=img_portada_name, pdf=pdf_name, marca_agua=marca_agua
+            )
+            nueva_imagen.save()
+            categorias_seleccionadas = request.POST.getlist('categorias')
+            for cat_id in categorias_seleccionadas:
+                try:
+                    categoria = Categoria.objects.get(pk=cat_id)
+                    nueva_imagen.categorias.add(categoria)
+                except:
+                    pass
+            return redirect('lista_imagenes')
+        except Exception as e:
+            messages.error(request, f'Error: {str(e)}')
+            return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': str(e)})
+    return render(request, 'agregar_imagen.html', {'categorias': categorias})
+
+@login_required
+@admin_required
+def editar_imagen(request, id_imagen):
+    imagen = get_object_or_404(Imagen, pk=id_imagen)
+    categorias = Categoria.objects.all()
+    if request.method == 'POST':
+        try:
+            imagen.titulo = request.POST.get('titulo')
+            imagen.descripcion = request.POST.get('descripcion', '')
+            imagen.autorImg = request.POST.get('autorImg')
+            imagen.marca_agua = request.POST.get('marca_agua', '')
+            if 'img_portada' in request.FILES:
+                if imagen.img_portada:
+                    imagen.img_portada.delete()
+                imagen.img_portada = request.FILES['img_portada']
+            if 'pdf' in request.FILES:
+                if imagen.pdf:
+                    imagen.pdf.delete()
+                imagen.pdf = request.FILES['pdf']
+            imagen.save()
+            imagen.categorias.set(request.POST.getlist('categorias'))
+            messages.success(request, "Imagen actualizada")
+            return redirect('lista_imagenes')
+        except Exception as e:
+            messages.error(request, f'Error: {str(e)}')
+            return render(request, 'editar_imagen.html', {'imagen': imagen, 'categorias': categorias})
+    return render(request, 'editar_imagen.html', {'imagen': imagen, 'categorias': categorias})
+
+@admin_required
+def eliminar_imagen(request, pk):
+    imagen = get_object_or_404(Imagen, pk=pk)
+    if request.method == 'POST':
+        imagen.delete()
+        messages.success(request, "Imagen eliminada")
+        return redirect('lista_imagenes')
+    return redirect('lista_imagenes')
+
+@login_required
+def editar_marca(request, id_imagen):
+    from PIL import Image as PILImage
+    import io
+    from django.core.files.base import ContentFile
+    imagen = get_object_or_404(Imagen, pk=id_imagen)
+    if request.method == 'POST':
+        if 'img_portada' in request.FILES:
+            imagen.img_portada = request.FILES['img_portada']
+        if 'marca_agua' in request.FILES:
+            marca_agua_file = request.FILES['marca_agua']
+            marca_agua = PILImage.open(marca_agua_file)
+            img_portada = PILImage.open(imagen.img_portada)
+            transparencia = 0.5
+            marca_agua.putalpha(int(255 * transparencia))
+            img_portada.paste(marca_agua, (0, 0), marca_agua)
+            img_io = io.BytesIO()
+            img_portada.save(img_io, format='PNG')
+            img_file = ContentFile(img_io.getvalue(), 'imagen_con_marca_agua.png')
+            imagen.img_portada = img_file
+        imagen.save()
+        return redirect('lista_imagenes')
+    return render(request, 'editar_marca.html', {'imagen': imagen})
