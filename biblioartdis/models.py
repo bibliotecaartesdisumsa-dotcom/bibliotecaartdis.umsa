@@ -12,6 +12,9 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count
 
+# Importar Cloudinary
+from cloudinary.models import CloudinaryField
+
 def get_fecha_baja_default():
     return timezone.now() + timedelta(days=5*365)
 
@@ -138,6 +141,7 @@ class Categoria(models.Model):
     nom_cat = models.CharField(max_length=100)
     def __str__(self):
         return self.nom_cat   
+
 class Libro(models.Model):
     opciones_categ = (
         ('NIVEL 1', 'NIVEL 1'),
@@ -164,9 +168,32 @@ class Libro(models.Model):
     titulo = models.CharField(max_length=255)
     edicion = models.CharField(max_length=50, blank=True, null=True)  
     categoria = models.CharField(max_length=15, choices=opciones_categ)
-    img_portada = models.ImageField(upload_to='portadas/')
-    pdf = models.FileField(upload_to='pdfs/')
-    archivo_autorizacion = models.FileField(upload_to='autorizaciones/', blank=True, null=True)
+    
+    # ✅ CAMBIADO: Usar CloudinaryField en lugar de ImageField/FileField
+    img_portada = CloudinaryField(
+        'Portada',
+        folder='biblioteca/portadas/',
+        transformation={'quality': 'auto', 'fetch_format': 'auto'},
+        null=True,
+        blank=True
+    )
+    
+    pdf = CloudinaryField(
+        'PDF',
+        folder='biblioteca/pdfs/',
+        resource_type='auto',
+        null=True,
+        blank=True
+    )
+    
+    archivo_autorizacion = CloudinaryField(
+        'Autorización',
+        folder='biblioteca/autorizaciones/',
+        resource_type='auto',
+        null=True,
+        blank=True
+    )
+    
     autores = models.ManyToManyField('Autor')
     fecha_publicacion = models.DateField(default=date.today)
     descripcion = models.TextField(blank=True, null=True)
@@ -175,13 +202,12 @@ class Libro(models.Model):
     pdf_url = models.URLField(max_length=500, blank=True, null=True)
     categorias = models.ManyToManyField(Categoria, blank=True)
 
-
     def agregar_palabras_claves(self, palabras):
         palabras_claves_actuales = self.palabra_clave.split(', ') if self.palabra_clave else []
         nuevas_palabras = [palabra.strip() for palabra in palabras.split(',')]
         palabras_claves_actuales.extend(nuevas_palabras)
         self.palabra_clave = ', '.join(palabras_claves_actuales)
-        self.save()  # Guardar los cambios en la base de datos
+        self.save()
 
     def __str__(self):
         return self.titulo
@@ -219,8 +245,24 @@ class Revista(models.Model):
     id_revista = models.AutoField(primary_key=True)
     nro_revista = models.IntegerField(null=True, blank=True)
     coleccion = models.ForeignKey(Coleccion, on_delete=models.CASCADE)
-    img_portada = models.ImageField(upload_to='portadasRev/')
-    pdf = models.FileField(upload_to='pdfsRev/', null=True, blank=True)
+    
+    # ✅ CAMBIADO: Usar CloudinaryField
+    img_portada = CloudinaryField(
+        'Portada',
+        folder='revistas/portadas/',
+        transformation={'quality': 'auto', 'fetch_format': 'auto'},
+        null=True,
+        blank=True
+    )
+    
+    pdf = CloudinaryField(
+        'PDF',
+        folder='revistas/pdfs/',
+        resource_type='auto',
+        null=True,
+        blank=True
+    )
+    
     url = models.URLField(max_length=200, blank=True, null=True)
     descripcion = models.TextField(blank=True, null=True)
 
@@ -256,21 +298,40 @@ class Imagen(models.Model):
     titulo = models.CharField(max_length=255)
     autorImg = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
-    img_portada = models.ImageField(upload_to='imagenes/', max_length=255)
-    pdf = models.FileField(upload_to='pdfs/', null=True, blank=True, max_length=255)
+    
+    # ✅ CAMBIADO: Usar CloudinaryField
+    img_portada = CloudinaryField(
+        'Imagen',
+        folder='imagenes/',
+        transformation={'quality': 'auto', 'fetch_format': 'auto', 'crop': 'limit', 'width': 1200},
+        null=True,
+        blank=True
+    )
+    
+    pdf = CloudinaryField(
+        'PDF',
+        folder='imagenes/pdfs/',
+        resource_type='auto',
+        null=True,
+        blank=True
+    )
+    
     fecha_subida = models.DateTimeField(auto_now_add=True)
-    marca_agua = models.ImageField(upload_to='marcas_agua/', max_length=255, blank=True, null=True)
+    
+    marca_agua = CloudinaryField(
+        'Marca de agua',
+        folder='imagenes/marcas_agua/',
+        null=True,
+        blank=True
+    )
+    
     categorias = models.ManyToManyField(Categoria, blank=True)
 
     def __str__(self):
         return self.titulo
 
     def save(self, *args, **kwargs):
-        # Almacena la imagen previa si existe y se actualiza `img_portada`
-        if self.pk:
-            old_img = Imagen.objects.get(pk=self.pk).img_portada
-            if old_img and old_img != self.img_portada:
-                old_img.delete(save=False)  # Elimina la imagen antigua
+        # Cloudinary maneja automáticamente la eliminación de archivos antiguos
         super().save(*args, **kwargs)
     
 class HistorialBusqueda(models.Model):
@@ -282,7 +343,6 @@ class HistorialBusqueda(models.Model):
        ordering = ['-fecha_busqueda']
     
 # models.py - Agregar después de la clase HistorialBusqueda y antes de auditlog
-
 class CodigoVerificacion(models.Model):
     id_codigo = models.AutoField(primary_key=True)
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
