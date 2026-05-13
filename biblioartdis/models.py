@@ -18,6 +18,7 @@ from cloudinary.models import CloudinaryField
 def get_fecha_baja_default():
     return timezone.now() + timedelta(days=5*365)
 
+
 class Usuario(models.Model):
     opciones_usuarios = (
         ('Estudiante', 'Estudiante'),
@@ -55,20 +56,20 @@ class Usuario(models.Model):
     esta_activo = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ['-fecha_alta']  # Ordenar por fecha de alta descendente
+        ordering = ['-fecha_alta']
 
     def __str__(self):
-        return f"ID: {self.usuario_id} Usuario: {self.nombres}, Tipo: {self.tipo_usuario}"
+        nombre_str = str(self.nombres) if self.nombres else "Sin nombre"
+        tipo_str = str(self.tipo_usuario) if self.tipo_usuario else "Sin tipo"
+        return f"ID: {self.usuario_id} Usuario: {nombre_str}, Tipo: {tipo_str}"
 
     def save(self, *args, **kwargs):
-        if not self.pk:  # Si es una nueva instancia
+        if not self.pk:
             self.fecha_baja = get_fecha_baja_default()
         super().save(*args, **kwargs)
 
-    # Métodos útiles para reportes
     @property
     def dias_restantes(self):
-        """Retorna los días restantes hasta la fecha de baja"""
         if self.fecha_baja:
             delta = self.fecha_baja - timezone.now()
             return max(0, delta.days)
@@ -76,7 +77,6 @@ class Usuario(models.Model):
 
     @property
     def estado(self):
-        """Retorna el estado actual del usuario"""
         if not self.esta_activo:
             return "Inactivo"
         if self.dias_restantes <= 0:
@@ -85,7 +85,6 @@ class Usuario(models.Model):
 
     @classmethod
     def get_usuarios_por_vencer(cls, dias=30):
-        """Retorna usuarios que vencerán en los próximos X días"""
         fecha_limite = timezone.now() + timedelta(days=dias)
         return cls.objects.filter(
             esta_activo=True,
@@ -95,7 +94,6 @@ class Usuario(models.Model):
 
     @classmethod
     def get_estadisticas(cls):
-        """Retorna estadísticas básicas de usuarios"""
         total = cls.objects.count()
         activos = cls.objects.filter(esta_activo=True).count()
         por_tipo = cls.objects.filter(esta_activo=True).values(
@@ -108,39 +106,45 @@ class Usuario(models.Model):
             'por_tipo': por_tipo
         }
 
-# Señal para crear o actualizar el perfil de usuario
+
 @receiver(post_save, sender=User)
 def create_or_update_user_profile(sender, instance, created, **kwargs):
     if created:
-        # Crear un Usuario por defecto cuando se crea un User
         try:
             Usuario.objects.create(
                 user=instance,
-                nombres=instance.username,  # Usar el username como nombre por defecto
-                apepat='-',  # Campos obligatorios con valores por defecto
+                nombres=instance.username if instance.username else "Usuario",
+                apepat='-',
                 apemat='-',
                 ci='SIN CI',
                 correo=instance.email or f'{instance.username}@example.com',
-                extension='LP',  # Valor por defecto
-                tipo_usuario='Externo',  # Valor por defecto
+                extension='LP',
+                tipo_usuario='Externo',
                 nro_celular='00000000'
             )
         except Exception as e:
             print(f"Error al crear Usuario: {e}")
-    # Eliminamos la actualización automática del correo aquí para evitar conflictos
+
 
 class Autor(models.Model):
     id_autor = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
 
     def __str__(self):
-        return f"{self.nombre} "
- 
+        if self.nombre and self.nombre.strip():
+            return str(self.nombre)
+        return f"Autor {self.id_autor}"
+
+
 class Categoria(models.Model):
     id_categoria = models.AutoField(primary_key=True)
     nom_cat = models.CharField(max_length=100)
+    
     def __str__(self):
-        return self.nom_cat   
+        if self.nom_cat and self.nom_cat.strip():
+            return str(self.nom_cat)
+        return f"Categoría {self.id_categoria}"
+
 
 class Libro(models.Model):
     opciones_categ = (
@@ -169,7 +173,6 @@ class Libro(models.Model):
     edicion = models.CharField(max_length=50, blank=True, null=True)  
     categoria = models.CharField(max_length=15, choices=opciones_categ)
     
-    # ✅ CAMBIADO: Usar CloudinaryField en lugar de ImageField/FileField
     img_portada = CloudinaryField(
         'Portada',
         folder='biblioteca/portadas/',
@@ -210,7 +213,9 @@ class Libro(models.Model):
         self.save()
 
     def __str__(self):
-        return self.titulo
+        if self.titulo and self.titulo.strip():
+            return str(self.titulo)
+        return f"Libro {self.id_libro}"
 
 
 class Sugerencia(models.Model):
@@ -226,7 +231,9 @@ class Sugerencia(models.Model):
     fecha_respuesta = models.DateTimeField(null=True, blank=True)
     
     def __str__(self):
-        return f"Sugerencia #{self.id_sugerencia}: {self.titulo_sugerencia} ({self.autor_sugerencia})"
+        titulo = str(self.titulo_sugerencia) if self.titulo_sugerencia else "Sin título"
+        autor = str(self.autor_sugerencia) if self.autor_sugerencia else "Autor desconocido"
+        return f"Sugerencia #{self.id_sugerencia}: {titulo} ({autor})"
 
 
 class Coleccion(models.Model):
@@ -239,14 +246,16 @@ class Coleccion(models.Model):
         ordering = ['orden']
 
     def __str__(self):
-        return self.nomb_colecc
+        if self.nomb_colecc and self.nomb_colecc.strip():
+            return str(self.nomb_colecc)
+        return f"Colección {self.id_coleccion}"
+
 
 class Revista(models.Model):
     id_revista = models.AutoField(primary_key=True)
     nro_revista = models.IntegerField(null=True, blank=True)
     coleccion = models.ForeignKey(Coleccion, on_delete=models.CASCADE)
     
-    # ✅ CAMBIADO: Usar CloudinaryField
     img_portada = CloudinaryField(
         'Portada',
         folder='revistas/portadas/',
@@ -267,7 +276,7 @@ class Revista(models.Model):
     descripcion = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        coleccion_nombre = self.coleccion.nomb_colecc if self.coleccion else "Sin colección"
+        coleccion_nombre = str(self.coleccion.nomb_colecc) if self.coleccion and self.coleccion.nomb_colecc else "Sin colección"
         numero = f"#{self.nro_revista}" if self.nro_revista else "s/n"
         return f"Revista {numero} de la colección {coleccion_nombre}"
 
@@ -279,7 +288,10 @@ class VisitaLibro(models.Model):
     libro_visitado = models.ForeignKey('Libro', on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"{self.visitante} visitó {self.libro_visitado} el {self.fecha_visualizacion}"
+        visitante_str = str(self.visitante) if self.visitante else "Usuario desconocido"
+        libro_str = str(self.libro_visitado) if self.libro_visitado else "Libro desconocido"
+        fecha_str = str(self.fecha_visualizacion) if self.fecha_visualizacion else "fecha desconocida"
+        return f"{visitante_str} visitó {libro_str} el {fecha_str}"
 
     @classmethod
     def obtUltimaVisitaLibro(cls, usuario, libro, fecha):
@@ -293,13 +305,13 @@ class VisitaLibro(models.Model):
         except cls.DoesNotExist:
             return None
 
+
 class Imagen(models.Model):
     id_Imagen = models.AutoField(primary_key=True)
     titulo = models.CharField(max_length=255)
     autorImg = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
     
-    # ✅ CAMBIADO: Usar CloudinaryField
     img_portada = CloudinaryField(
         'Imagen',
         folder='imagenes/',
@@ -328,21 +340,28 @@ class Imagen(models.Model):
     categorias = models.ManyToManyField(Categoria, blank=True)
 
     def __str__(self):
-        return self.titulo
+        if self.titulo and self.titulo.strip():
+            return str(self.titulo)
+        return f"Imagen {self.id_Imagen}"
 
     def save(self, *args, **kwargs):
-        # Cloudinary maneja automáticamente la eliminación de archivos antiguos
         super().save(*args, **kwargs)
-    
+
+
 class HistorialBusqueda(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     termino_busqueda = models.CharField(max_length=255)
     fecha_busqueda = models.DateTimeField(auto_now_add=True)
    
     class Meta:
-       ordering = ['-fecha_busqueda']
+        ordering = ['-fecha_busqueda']
     
-# models.py - Agregar después de la clase HistorialBusqueda y antes de auditlog
+    def __str__(self):
+        usuario_str = str(self.usuario.username) if self.usuario and self.usuario.username else "Usuario desconocido"
+        termino = str(self.termino_busqueda) if self.termino_busqueda else "Sin término"
+        return f"{usuario_str} buscó: {termino}"
+
+
 class CodigoVerificacion(models.Model):
     id_codigo = models.AutoField(primary_key=True)
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -357,13 +376,16 @@ class CodigoVerificacion(models.Model):
         ordering = ['-creado_en']
     
     def __str__(self):
-        return f"Código para {self.usuario.email} - Expira: {self.expira_en}"
+        email = str(self.usuario.email) if self.usuario and self.usuario.email else "usuario desconocido"
+        expira = str(self.expira_en) if self.expira_en else "fecha desconocida"
+        return f"Código para {email} - Expira: {expira}"
     
     def es_valido(self):
-        """Verifica si el código aún es válido (no usado y no expirado)"""
         from django.utils import timezone
         return not self.usado and timezone.now() < self.expira_en
-        
+
+
+# Auditlog
 from auditlog.registry import auditlog
 auditlog.register(Usuario)
 auditlog.register(Autor)
