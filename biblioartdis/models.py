@@ -390,7 +390,7 @@ from auditlog.registry import auditlog
 auditlog.register(Usuario)
 auditlog.register(Autor)
 auditlog.register(Categoria)
-auditlog.register(Libro)
+auditlog.register(Libro, exclude_fields=['archivo_autorizacion'])
 auditlog.register(Sugerencia)
 auditlog.register(Imagen)
 auditlog.register(Revista)
