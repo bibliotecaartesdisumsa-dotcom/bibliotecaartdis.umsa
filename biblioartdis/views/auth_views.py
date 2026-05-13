@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 import json
 import logging
+import re
 
 from ..decorators import admin_required
 from ..email_utils import enviar_codigo_verificacion, verificar_codigo
@@ -24,7 +25,7 @@ intentos_fallidos = {}
 
 
 def home(request):
-    """PASO 1: Solicitar email (acepta @umsa.bo y @gmail.com para desarrollo)"""
+    """PASO 1: Solicitar email - Acepta @umsa.bo y el correo especial vc3070934@gmail.com"""
     if request.method == 'POST':
         email = request.POST.get('correo', '').strip().lower()
         
@@ -35,9 +36,11 @@ def home(request):
             messages.error(request, '❌ Por favor ingresa un correo electrónico válido.')
             return render(request, 'login.html')
         
-        # ✅ Para desarrollo: permitir @gmail.com también
-        if not (email.endswith('@umsa.bo') or email.endswith('@gmail.com')):
-            messages.error(request, '❌ Solo se permiten correos @umsa.bo (o @gmail.com para pruebas)')
+        # ✅ Validación especial: permite @umsa.bo o el correo específico @gmail.com
+        CORREO_ESPECIAL = 'vc3070934@gmail.com'
+        
+        if not (email.endswith('@umsa.bo') or email == CORREO_ESPECIAL):
+            messages.error(request, '❌ Solo se permiten correos institucionales @umsa.bo')
             return render(request, 'login.html')
         
         # Verificar intentos fallidos (seguridad)
@@ -46,46 +49,124 @@ def home(request):
             messages.error(request, '❌ Demasiados intentos. Espera 5 minutos.')
             return render(request, 'login.html')
         
-        # Buscar usuario por email
+        # ========== CREAR USUARIO AUTOMÁTICAMENTE SI NO EXISTE ==========
         try:
+            # Buscar si el usuario ya existe
             user = User.objects.get(email=email)
-            
-            # Verificar si el usuario está activo
-            if not user.is_active:
-                messages.error(request, '❌ Tu cuenta está desactivada. Contacta al administrador.')
-                return render(request, 'login.html')
-            
-            # Verificar si tiene perfil de Usuario
-            if not hasattr(user, 'usuario'):
-                messages.error(request, '❌ Tu perfil no está completo. Contacta al administrador.')
-                return render(request, 'login.html')
-            
-            # Verificar si el usuario está activo (fecha_baja)
-            if user.usuario.fecha_baja and user.usuario.fecha_baja < timezone.now():
-                messages.error(request, '❌ Tu cuenta ha expirado. Contacta al administrador para renovarla.')
-                return render(request, 'login.html')
-            
-            # Enviar código de verificación
-            try:
-                enviar_codigo_verificacion(user)
-            except Exception as e:
-                logger.error(f"Error enviando código a {email}: {e}")
-                messages.error(request, '❌ Error al enviar el código. Intenta nuevamente.')
-                return render(request, 'login.html')
-            
-            # Guardar en sesión que el usuario está en proceso de verificación
-            request.session['verificacion_email'] = email
-            request.session['verificacion_timestamp'] = str(timezone.now())
-            
-            # Redirigir al formulario de código
-            return redirect('verificar_codigo')
+            logger.info(f"Usuario existente: {email}")
             
         except User.DoesNotExist:
-            # Registrar intento fallido
-            intentos_fallidos[ip] = intentos_fallidos.get(ip, 0) + 1
-            
-            messages.error(request, '❌ No existe una cuenta con este correo. Contacta al administrador para registrarte.')
+            # 🔥 CREAR USUARIO AUTOMÁTICAMENTE (no requiere registro previo)
+            try:
+                # Crear username a partir del email
+                username_base = re.sub(r'[^a-zA-Z0-9_]', '', email.split('@')[0])
+                if not username_base:
+                    username_base = f"user_{email.split('@')[0]}"
+                
+                # Asegurar username único
+                final_username = username_base
+                counter = 1
+                while User.objects.filter(username=final_username).exists():
+                    final_username = f"{username_base}{counter}"
+                    counter += 1
+                
+                # Crear el usuario de Django
+                user = User.objects.create_user(
+                    username=final_username,
+                    email=email,
+                    password=None  # Sin contraseña porque usamos 2FA
+                )
+                user.set_unusable_password()  # Deshabilitar contraseña normal
+                user.first_name = email.split('@')[0].capitalize()
+                user.save()
+                
+                # Crear el perfil de Usuario automáticamente
+                from ..models import Usuario
+                from datetime import timedelta
+                
+                # Determinar tipo de usuario (Administrador para el correo especial)
+                tipo_usuario = 'Administrador' if email == CORREO_ESPECIAL else 'Externo'
+                
+                usuario_perfil = Usuario.objects.create(
+                    user=user,
+                    nombres=email.split('@')[0].capitalize(),
+                    apepat='',
+                    apemat='',
+                    ci='PENDIENTE',  # Se actualizará después
+                    correo=email,
+                    extension='LP',
+                    complemento='',
+                    tipo_usuario=tipo_usuario,
+                    ru='',
+                    nro_celular='',
+                    fecha_baja=timezone.now() + timedelta(days=365*5),  # 5 años
+                    esta_activo=True
+                )
+                logger.info(f"✅ Usuario creado automáticamente: {email} (Tipo: {tipo_usuario})")
+                
+                if email == CORREO_ESPECIAL:
+                    messages.success(request, f'✨ ¡Bienvenido Administrador! Se ha creado tu cuenta automáticamente.')
+                else:
+                    messages.info(request, f'📝 Se ha creado tu cuenta automáticamente. ¡Bienvenido a la biblioteca!')
+                
+            except Exception as e:
+                logger.error(f"❌ Error al crear usuario automático {email}: {str(e)}")
+                messages.error(request, 'Error al crear tu cuenta. Contacta al administrador.')
+                return render(request, 'login.html')
+        
+        # Verificar si el usuario está activo
+        if not user.is_active:
+            messages.error(request, '❌ Tu cuenta está desactivada. Contacta al administrador.')
             return render(request, 'login.html')
+        
+        # Verificar si tiene perfil de Usuario (si no, crearlo)
+        if not hasattr(user, 'usuario'):
+            from ..models import Usuario
+            from datetime import timedelta
+            
+            try:
+                tipo_usuario = 'Administrador' if email == CORREO_ESPECIAL else 'Externo'
+                
+                usuario_perfil = Usuario.objects.create(
+                    user=user,
+                    nombres=email.split('@')[0].capitalize(),
+                    apepat='',
+                    apemat='',
+                    ci='PENDIENTE',
+                    correo=email,
+                    extension='LP',
+                    complemento='',
+                    tipo_usuario=tipo_usuario,
+                    ru='',
+                    nro_celular='',
+                    fecha_baja=timezone.now() + timedelta(days=365*5),
+                    esta_activo=True
+                )
+                logger.info(f"✅ Perfil creado para usuario existente: {email}")
+            except Exception as e:
+                logger.error(f"❌ Error al crear perfil: {str(e)}")
+                messages.error(request, 'Error al configurar tu perfil.')
+                return render(request, 'login.html')
+        
+        # Verificar si el usuario está activo (fecha_baja)
+        if user.usuario.fecha_baja and user.usuario.fecha_baja < timezone.now():
+            messages.error(request, '❌ Tu cuenta ha expirado. Contacta al administrador para renovarla.')
+            return render(request, 'login.html')
+        
+        # Enviar código de verificación
+        try:
+            enviar_codigo_verificacion(user)
+        except Exception as e:
+            logger.error(f"Error enviando código a {email}: {e}")
+            messages.error(request, '❌ Error al enviar el código. Intenta nuevamente.')
+            return render(request, 'login.html')
+        
+        # Guardar en sesión que el usuario está en proceso de verificación
+        request.session['verificacion_email'] = email
+        request.session['verificacion_timestamp'] = str(timezone.now())
+        
+        # Redirigir al formulario de código
+        return redirect('verificar_codigo')
     
     return render(request, 'login.html')
 
@@ -109,8 +190,7 @@ def verificar_codigo_view(request):
             user = User.objects.get(email=email)
             
             if verificar_codigo(user, codigo):
-                # Código correcto - iniciar sesión
-                # Especificar el backend de autenticación
+                # ✅ Especificar el backend de autenticación
                 user.backend = 'django.contrib.auth.backends.ModelBackend'
                 login(request, user)
                 
