@@ -11,7 +11,7 @@ from django.contrib.auth.hashers import check_password
 import random
 import logging
 import json
-import spacy
+
 
 from ..models import (
     Usuario, Libro, Autor, Categoria, Sugerencia, Coleccion, Revista,
@@ -21,7 +21,11 @@ from ..utils.text_cleaner import limpiar_busqueda
 from ..utils.chat_responses import ChatResponses
 from ..groq_config import get_ai_response  # ✅ CORRECTO
 
-nlp = spacy.load("es_core_news_sm")
+try:
+    import spacy
+    nlp = spacy.load("es_core_news_sm")
+except:
+    nlp = None
 logger = logging.getLogger(__name__)
 
 # ==================== Perfil e Historial ====================

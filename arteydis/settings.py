@@ -14,9 +14,10 @@ import warnings
 warnings.filterwarnings("ignore", module="admin_interface.templatetags")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+DEBUG = False
+ALLOWED_HOSTS = [
+    'bibliotecaumsaartdis2026.pythonanywhere.com'
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -29,8 +30,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    'biblioartdis',
+    'cloudinary',
+    'cloudinary_storage',
+    'biblioartdis.apps.BiblioartdisConfig',
     
     # Aplicaciones adicionales
     'django_extensions',
@@ -120,9 +122,6 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'OPTIONS': {
-            'timeout': 20,
-        }
     }
 }
 
@@ -192,6 +191,14 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'biblioteca.artesdis.umsa@gmail.com'
 EMAIL_HOST_PASSWORD = 'chlbefsqxhtfclfp'  # ✅ NUEVA CONTRASEÑA DE APLICACIÓN
 DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'dnnl3rije',
+    'API_KEY': '372388277625767',
+    'API_SECRET': '1Gjjfdf968eIypjxyu_nr3fo2Mk',
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Nota: La contraseña de aplicación debe ir sin espacios
 # chlb efsq xhtf clfp (con espacios)
