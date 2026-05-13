@@ -44,8 +44,8 @@ INSTALLED_APPS = [
     'django_filters',
     'django_cleanup.apps.CleanupConfig',
     'rest_framework',
-    'auditlog',
-    'reversion',
+    # 'auditlog',  # 🔥 DESACTIVADO - Causaba error __str__
+    # 'reversion',  # 🔥 DESACTIVADO
     'widget_tweaks',
     'import_export',
     'django_session_timeout',
@@ -60,8 +60,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'auditlog.middleware.AuditlogMiddleware',
-    'reversion.middleware.RevisionMiddleware',
+    # 'auditlog.middleware.AuditlogMiddleware',  # 🔥 DESACTIVADO
+    # 'reversion.middleware.RevisionMiddleware',  # 🔥 DESACTIVADO
     'django_session_timeout.middleware.SessionTimeoutMiddleware',
 ]
 
@@ -205,9 +205,7 @@ CLOUDINARY_STORAGE = {
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Cloudinary maneja las URLs de los archivos automáticamente
-# Por eso MEDIA_URL no es necesario especificarlo
-# Pero lo dejamos como placeholder
-MEDIA_URL = '/media/'  # Cloudinary generará las URLs reales
+MEDIA_URL = '/media/'
 
 # Para debugging de Cloudinary
 import logging
@@ -235,5 +233,5 @@ SILENCED_SYSTEM_CHECKS = ['security.W019']
 IMPORT_EXPORT_USE_TRANSACTIONS = True
 IMPORT_EXPORT_SKIP_ADMIN_LOG = False
 
-# Configuración para django-reversion
-REVERSION_REGISTER_AUTO_ADD_TO_ADMIN = True
+# Configuración para django-reversion (desactivado)
+# REVERSION_REGISTER_AUTO_ADD_TO_ADMIN = True

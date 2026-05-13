@@ -59,9 +59,12 @@ class Usuario(models.Model):
         ordering = ['-fecha_alta']
 
     def __str__(self):
-        nombre_str = str(self.nombres) if self.nombres else "Sin nombre"
-        tipo_str = str(self.tipo_usuario) if self.tipo_usuario else "Sin tipo"
-        return f"ID: {self.usuario_id} Usuario: {nombre_str}, Tipo: {tipo_str}"
+        try:
+            nombre_str = str(self.nombres) if self.nombres else "Sin nombre"
+            tipo_str = str(self.tipo_usuario) if self.tipo_usuario else "Sin tipo"
+            return f"ID: {self.usuario_id} Usuario: {nombre_str}, Tipo: {tipo_str}"
+        except:
+            return f"Usuario {self.usuario_id}"
 
     def save(self, *args, **kwargs):
         if not self.pk:
@@ -131,9 +134,12 @@ class Autor(models.Model):
     nombre = models.CharField(max_length=100)
 
     def __str__(self):
-        if self.nombre and self.nombre.strip():
-            return str(self.nombre)
-        return f"Autor {self.id_autor}"
+        try:
+            if self.nombre and self.nombre.strip():
+                return str(self.nombre)
+            return f"Autor {self.id_autor}"
+        except:
+            return f"Autor {self.id_autor}"
 
 
 class Categoria(models.Model):
@@ -141,9 +147,12 @@ class Categoria(models.Model):
     nom_cat = models.CharField(max_length=100)
     
     def __str__(self):
-        if self.nom_cat and self.nom_cat.strip():
-            return str(self.nom_cat)
-        return f"Categoría {self.id_categoria}"
+        try:
+            if self.nom_cat and self.nom_cat.strip():
+                return str(self.nom_cat)
+            return f"Categoría {self.id_categoria}"
+        except:
+            return f"Categoría {self.id_categoria}"
 
 
 class Libro(models.Model):
@@ -213,9 +222,12 @@ class Libro(models.Model):
         self.save()
 
     def __str__(self):
-        if self.titulo and self.titulo.strip():
-            return str(self.titulo)
-        return f"Libro {self.id_libro}"
+        try:
+            if self.titulo and self.titulo.strip():
+                return str(self.titulo)
+            return f"Libro {self.id_libro}"
+        except:
+            return f"Libro {self.id_libro}"
 
 
 class Sugerencia(models.Model):
@@ -231,9 +243,12 @@ class Sugerencia(models.Model):
     fecha_respuesta = models.DateTimeField(null=True, blank=True)
     
     def __str__(self):
-        titulo = str(self.titulo_sugerencia) if self.titulo_sugerencia else "Sin título"
-        autor = str(self.autor_sugerencia) if self.autor_sugerencia else "Autor desconocido"
-        return f"Sugerencia #{self.id_sugerencia}: {titulo} ({autor})"
+        try:
+            titulo = str(self.titulo_sugerencia) if self.titulo_sugerencia else "Sin título"
+            autor = str(self.autor_sugerencia) if self.autor_sugerencia else "Autor desconocido"
+            return f"Sugerencia #{self.id_sugerencia}: {titulo} ({autor})"
+        except:
+            return f"Sugerencia {self.id_sugerencia}"
 
 
 class Coleccion(models.Model):
@@ -246,9 +261,12 @@ class Coleccion(models.Model):
         ordering = ['orden']
 
     def __str__(self):
-        if self.nomb_colecc and self.nomb_colecc.strip():
-            return str(self.nomb_colecc)
-        return f"Colección {self.id_coleccion}"
+        try:
+            if self.nomb_colecc and self.nomb_colecc.strip():
+                return str(self.nomb_colecc)
+            return f"Colección {self.id_coleccion}"
+        except:
+            return f"Colección {self.id_coleccion}"
 
 
 class Revista(models.Model):
@@ -276,9 +294,12 @@ class Revista(models.Model):
     descripcion = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        coleccion_nombre = str(self.coleccion.nomb_colecc) if self.coleccion and self.coleccion.nomb_colecc else "Sin colección"
-        numero = f"#{self.nro_revista}" if self.nro_revista else "s/n"
-        return f"Revista {numero} de la colección {coleccion_nombre}"
+        try:
+            coleccion_nombre = str(self.coleccion.nomb_colecc) if self.coleccion and self.coleccion.nomb_colecc else "Sin colección"
+            numero = f"#{self.nro_revista}" if self.nro_revista else "s/n"
+            return f"Revista {numero} de la colección {coleccion_nombre}"
+        except:
+            return f"Revista {self.id_revista}"
 
 
 class VisitaLibro(models.Model):
@@ -288,10 +309,13 @@ class VisitaLibro(models.Model):
     libro_visitado = models.ForeignKey('Libro', on_delete=models.CASCADE)
 
     def __str__(self):
-        visitante_str = str(self.visitante) if self.visitante else "Usuario desconocido"
-        libro_str = str(self.libro_visitado) if self.libro_visitado else "Libro desconocido"
-        fecha_str = str(self.fecha_visualizacion) if self.fecha_visualizacion else "fecha desconocida"
-        return f"{visitante_str} visitó {libro_str} el {fecha_str}"
+        try:
+            visitante_str = str(self.visitante) if self.visitante else "Usuario desconocido"
+            libro_str = str(self.libro_visitado) if self.libro_visitado else "Libro desconocido"
+            fecha_str = str(self.fecha_visualizacion) if self.fecha_visualizacion else "fecha desconocida"
+            return f"{visitante_str} visitó {libro_str} el {fecha_str}"
+        except:
+            return f"Visita {self.id}"
 
     @classmethod
     def obtUltimaVisitaLibro(cls, usuario, libro, fecha):
@@ -340,9 +364,12 @@ class Imagen(models.Model):
     categorias = models.ManyToManyField(Categoria, blank=True)
 
     def __str__(self):
-        if self.titulo and self.titulo.strip():
-            return str(self.titulo)
-        return f"Imagen {self.id_Imagen}"
+        try:
+            if self.titulo and self.titulo.strip():
+                return str(self.titulo)
+            return f"Imagen {self.id_Imagen}"
+        except:
+            return f"Imagen {self.id_Imagen}"
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
@@ -357,9 +384,12 @@ class HistorialBusqueda(models.Model):
         ordering = ['-fecha_busqueda']
     
     def __str__(self):
-        usuario_str = str(self.usuario.username) if self.usuario and self.usuario.username else "Usuario desconocido"
-        termino = str(self.termino_busqueda) if self.termino_busqueda else "Sin término"
-        return f"{usuario_str} buscó: {termino}"
+        try:
+            usuario_str = str(self.usuario.username) if self.usuario and self.usuario.username else "Usuario desconocido"
+            termino = str(self.termino_busqueda) if self.termino_busqueda else "Sin término"
+            return f"{usuario_str} buscó: {termino}"
+        except:
+            return f"Búsqueda {self.id}"
 
 
 class CodigoVerificacion(models.Model):
@@ -376,22 +406,27 @@ class CodigoVerificacion(models.Model):
         ordering = ['-creado_en']
     
     def __str__(self):
-        email = str(self.usuario.email) if self.usuario and self.usuario.email else "usuario desconocido"
-        expira = str(self.expira_en) if self.expira_en else "fecha desconocida"
-        return f"Código para {email} - Expira: {expira}"
+        try:
+            email = str(self.usuario.email) if self.usuario and self.usuario.email else "usuario desconocido"
+            expira = str(self.expira_en) if self.expira_en else "fecha desconocida"
+            return f"Código para {email} - Expira: {expira}"
+        except:
+            return f"Código {self.id_codigo}"
     
     def es_valido(self):
         from django.utils import timezone
         return not self.usado and timezone.now() < self.expira_en
 
 
-# Auditlog
-from auditlog.registry import auditlog
-auditlog.register(Usuario)
-auditlog.register(Autor)
-auditlog.register(Categoria)
-auditlog.register(Libro, exclude_fields=['archivo_autorizacion'])
-auditlog.register(Sugerencia)
-auditlog.register(Imagen)
-auditlog.register(Revista)
-auditlog.register(Coleccion)
+# ============================================
+# AUDITLOG - DESACTIVADO TEMPORALMENTE
+# ============================================
+# from auditlog.registry import auditlog
+# auditlog.register(Usuario)
+# auditlog.register(Autor)
+# auditlog.register(Categoria)
+# auditlog.register(Libro, exclude_fields=['archivo_autorizacion'])
+# auditlog.register(Sugerencia)
+# auditlog.register(Imagen)
+# auditlog.register(Revista)
+# auditlog.register(Coleccion)
