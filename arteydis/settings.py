@@ -224,7 +224,7 @@ import logging
 logging.getLogger('cloudinary').setLevel(logging.INFO)
 
 # ============================================
-# CONFIGURACIÓN DE EMAIL (VERIFICACIÓN 2FA)
+# CONFIGURACIÓN DE EMAIL (VERIFICACIÓN 2FA)ggg
 # ============================================
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
