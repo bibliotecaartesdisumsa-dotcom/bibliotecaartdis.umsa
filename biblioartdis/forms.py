@@ -4,8 +4,13 @@ import locale
 from datetime import datetime
 from .models import Autor,Imagen,Usuario,Coleccion,Revista
 
-locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Para sistemas Unix
-# locale.setlocale(locale.LC_TIME, 'es_ES')  # Para sistemas Windows
+try:
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_BO.UTF-8')
+    except locale.Error:
+        pass
 
 class LoginForm(forms.Form):
     correo = forms.EmailField(
