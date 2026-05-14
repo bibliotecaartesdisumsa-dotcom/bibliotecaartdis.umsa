@@ -246,10 +246,7 @@ IMPORT_EXPORT_SKIP_ADMIN_LOG = False
 # Configuración para django-reversion (desactivado)
 # REVERSION_REGISTER_AUTO_ADD_TO_ADMIN = True
 
-# ============================================
-# CONFIGURACIÓN PARA PRODUCCIÓN EN RAILWAY
-# ============================================
-
+# Configuración para producción en Railway
 CSRF_TRUSTED_ORIGINS = [
     'https://bibliotecaartdisumsa-production.up.railway.app',
 ]
