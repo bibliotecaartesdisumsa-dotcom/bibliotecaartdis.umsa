@@ -4,10 +4,9 @@ from django.contrib.messages import constants as messages
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
-import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -18,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore", module="admin_interface.templatetags")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 ALLOWED_HOSTS = [
     'bibliotecaumsaartdis2026.pythonanywhere.com',
     'bibliotecaartdisumsa-production.up.railway.app',
@@ -135,12 +134,22 @@ WSGI_APPLICATION = 'arteydis.wsgi.application'
 
 # Database
 
+# ============================================
+# BASE DE DATOS SUPABASE (POSTGRESQL)
+# ============================================
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL')
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PASSWORD': 'cnPd.fxp4x.5kMQ2',
+        'HOST': 'db.vmwkbkvsthswxshcwhmp.supabase.co',
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
+    }
 }
-
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
