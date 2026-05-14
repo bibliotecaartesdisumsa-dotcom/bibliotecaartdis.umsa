@@ -4,6 +4,7 @@ from django.contrib.messages import constants as messages
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -133,11 +134,11 @@ LOGIN_URL = '/'
 WSGI_APPLICATION = 'arteydis.wsgi.application'
 
 # Database
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL')
+    )
 }
 
 # Password validation
