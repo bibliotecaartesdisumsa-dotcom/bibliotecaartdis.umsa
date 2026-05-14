@@ -34,3 +34,4 @@ cloudinary
 django-cloudinary-storage
 groq
 python-dotenv
+psycopg2-binary
