@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore", module="admin_interface.templatetags")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 ALLOWED_HOSTS = [
     'bibliotecaumsaartdis2026.pythonanywhere.com',
     'bibliotecaartdisumsa-production.up.railway.app',
@@ -141,10 +141,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',
-        'USER': 'postgres',
+        'USER': 'postgres.vmwkbkvsthswxshcwhmp',
         'PASSWORD': 'cnPd.fxp4x.5kMQ2',
-        'HOST': 'db.vmwkbkvsthswxshcwhmp.supabase.co',
-        'PORT': '5432',
+        'HOST': 'aws-1-us-east-1.pooler.supabase.com',
+        'PORT': '6543',
         'OPTIONS': {
             'sslmode': 'require',
         },
