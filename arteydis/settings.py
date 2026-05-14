@@ -19,7 +19,6 @@ warnings.filterwarnings("ignore", module="admin_interface.templatetags")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 ALLOWED_HOSTS = [
-    'bibliotecaumsaartdis2026.pythonanywhere.com',
     'bibliotecaartdisumsa-production.up.railway.app',
     '.up.railway.app',
     '127.0.0.1',
