@@ -14,6 +14,8 @@ from django.utils import timezone
 import json
 import logging
 import re
+import threading
+from functools import wraps
 
 from ..decorators import admin_required
 from ..email_utils import enviar_codigo_verificacion, verificar_codigo
@@ -24,8 +26,102 @@ logger = logging.getLogger(__name__)
 intentos_fallidos = {}
 
 
+def enviar_codigo_async(user):
+    """
+    Envía el código de verificación en un hilo separado para no bloquear la respuesta
+    """
+    def send_thread():
+        try:
+            enviar_codigo_verificacion(user)
+            logger.info(f"Código enviado asíncronamente a {user.email}")
+        except Exception as e:
+            logger.error(f"Error enviando código asíncrono a {user.email}: {str(e)}")
+    
+    thread = threading.Thread(target=send_thread)
+    thread.daemon = True
+    thread.start()
+    return thread
+
+
+def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
+    """
+    Crea un usuario automáticamente si no existe.
+    Usa get_or_create para evitar duplicados.
+    Retorna (user, created, error_message)
+    """
+    try:
+        # Buscar si el usuario ya existe
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'username': None,  # Se generará automáticamente
+                'password': None,
+            }
+        )
+        
+        if created:
+            # Generar username a partir del email
+            username_base = re.sub(r'[^a-zA-Z0-9_]', '', email.split('@')[0])
+            if not username_base:
+                username_base = f"user_{email.split('@')[0]}"
+            
+            # Asegurar username único
+            final_username = username_base
+            counter = 1
+            while User.objects.filter(username=final_username).exists():
+                final_username = f"{username_base}{counter}"
+                counter += 1
+            
+            user.username = final_username
+            user.set_unusable_password()  # Deshabilitar contraseña normal
+            user.first_name = email.split('@')[0].capitalize()
+            user.save()
+            logger.info(f"✅ Usuario creado automáticamente: {email} (Username: {final_username})")
+        
+        # Verificar si tiene perfil de Usuario
+        from ..models import Usuario
+        from datetime import timedelta
+        
+        tipo_usuario = 'Administrador' if email == correo_especial else 'Externo'
+        
+        perfil, perfil_created = Usuario.objects.get_or_create(
+            user=user,
+            defaults={
+                'nombres': email.split('@')[0].capitalize(),
+                'apepat': '',
+                'apemat': '',
+                'ci': 'PENDIENTE',
+                'correo': email,
+                'extension': 'LP',
+                'complemento': '',
+                'tipo_usuario': tipo_usuario,
+                'ru': '',
+                'nro_celular': '',
+                'fecha_baja': timezone.now() + timedelta(days=365*5),
+                'esta_activo': True
+            }
+        )
+        
+        if perfil_created:
+            logger.info(f"✅ Perfil Usuario creado para: {email} (Tipo: {tipo_usuario})")
+        else:
+            # Actualizar datos si es necesario
+            if perfil.tipo_usuario != tipo_usuario:
+                perfil.tipo_usuario = tipo_usuario
+                perfil.save()
+                logger.info(f"🔄 Tipo de usuario actualizado para: {email}")
+        
+        return user, created, None
+        
+    except Exception as e:
+        logger.error(f"❌ Error al crear/obtener usuario {email}: {str(e)}", exc_info=True)
+        return None, False, str(e)
+
+
 def home(request):
-    """PASO 1: Solicitar email - Acepta @umsa.bo y el correo especial vc3070934@gmail.com"""
+    """PASO 1: Solicitar email - Acepta @umsa.bo y el correo especial"""
+    CORREO_ESPECIAL = 'vc3070934@gmail.com'
+    
     if request.method == 'POST':
         email = request.POST.get('correo', '').strip().lower()
         
@@ -36,9 +132,7 @@ def home(request):
             messages.error(request, '❌ Por favor ingresa un correo electrónico válido.')
             return render(request, 'login.html')
         
-        # ✅ Validación especial: permite @umsa.bo o el correo específico @gmail.com
-        CORREO_ESPECIAL = 'vc3070934@gmail.com'
-        
+        # Validación: permite @umsa.bo o el correo específico
         if not (email.endswith('@umsa.bo') or email == CORREO_ESPECIAL):
             messages.error(request, '❌ Solo se permiten correos institucionales @umsa.bo')
             return render(request, 'login.html')
@@ -49,115 +143,42 @@ def home(request):
             messages.error(request, '❌ Demasiados intentos. Espera 5 minutos.')
             return render(request, 'login.html')
         
-        # ========== CREAR USUARIO AUTOMÁTICAMENTE SI NO EXISTE ==========
-        try:
-            # Buscar si el usuario ya existe
-            user = User.objects.get(email=email)
-            logger.info(f"Usuario existente: {email}")
-            
-        except User.DoesNotExist:
-            # 🔥 CREAR USUARIO AUTOMÁTICAMENTE (no requiere registro previo)
-            try:
-                # Crear username a partir del email
-                username_base = re.sub(r'[^a-zA-Z0-9_]', '', email.split('@')[0])
-                if not username_base:
-                    username_base = f"user_{email.split('@')[0]}"
-                
-                # Asegurar username único
-                final_username = username_base
-                counter = 1
-                while User.objects.filter(username=final_username).exists():
-                    final_username = f"{username_base}{counter}"
-                    counter += 1
-                
-                # Crear el usuario de Django
-                user = User.objects.create_user(
-                    username=final_username,
-                    email=email,
-                    password=None  # Sin contraseña porque usamos 2FA
-                )
-                user.set_unusable_password()  # Deshabilitar contraseña normal
-                user.first_name = email.split('@')[0].capitalize()
-                user.save()
-                
-                # Crear el perfil de Usuario automáticamente
-                from ..models import Usuario
-                from datetime import timedelta
-                
-                # Determinar tipo de usuario (Administrador para el correo especial)
-                tipo_usuario = 'Administrador' if email == CORREO_ESPECIAL else 'Externo'
-                
-                usuario_perfil = Usuario.objects.create(
-                    user=user,
-                    nombres=email.split('@')[0].capitalize(),
-                    apepat='',
-                    apemat='',
-                    ci='PENDIENTE',  # Se actualizará después
-                    correo=email,
-                    extension='LP',
-                    complemento='',
-                    tipo_usuario=tipo_usuario,
-                    ru='',
-                    nro_celular='',
-                    fecha_baja=timezone.now() + timedelta(days=365*5),  # 5 años
-                    esta_activo=True
-                )
-                logger.info(f"✅ Usuario creado automáticamente: {email} (Tipo: {tipo_usuario})")
-                
-                if email == CORREO_ESPECIAL:
-                    messages.success(request, f'✨ ¡Bienvenido Administrador! Se ha creado tu cuenta automáticamente.')
-                else:
-                    messages.info(request, f'📝 Se ha creado tu cuenta automáticamente. ¡Bienvenido a la biblioteca!')
-                
-            except Exception as e:
-                logger.error(f"❌ Error al crear usuario automático {email}: {str(e)}")
-                messages.error(request, 'Error al crear tu cuenta. Contacta al administrador.')
-                return render(request, 'login.html')
+        # ========== CREAR O OBTENER USUARIO ==========
+        user, creado, error = crear_usuario_si_no_existe(email, CORREO_ESPECIAL)
+        
+        if error or user is None:
+            messages.error(request, f'Error al procesar tu cuenta: {error or "Contacta al administrador"}')
+            return render(request, 'login.html')
         
         # Verificar si el usuario está activo
         if not user.is_active:
             messages.error(request, '❌ Tu cuenta está desactivada. Contacta al administrador.')
             return render(request, 'login.html')
         
-        # Verificar si tiene perfil de Usuario (si no, crearlo)
-        if not hasattr(user, 'usuario'):
-            from ..models import Usuario
-            from datetime import timedelta
-            
-            try:
-                tipo_usuario = 'Administrador' if email == CORREO_ESPECIAL else 'Externo'
-                
-                usuario_perfil = Usuario.objects.create(
-                    user=user,
-                    nombres=email.split('@')[0].capitalize(),
-                    apepat='',
-                    apemat='',
-                    ci='PENDIENTE',
-                    correo=email,
-                    extension='LP',
-                    complemento='',
-                    tipo_usuario=tipo_usuario,
-                    ru='',
-                    nro_celular='',
-                    fecha_baja=timezone.now() + timedelta(days=365*5),
-                    esta_activo=True
-                )
-                logger.info(f"✅ Perfil creado para usuario existente: {email}")
-            except Exception as e:
-                logger.error(f"❌ Error al crear perfil: {str(e)}")
-                messages.error(request, 'Error al configurar tu perfil.')
+        # Verificar si tiene perfil y si está activo (fecha_baja)
+        if hasattr(user, 'usuario'):
+            if user.usuario.fecha_baja and user.usuario.fecha_baja < timezone.now():
+                messages.error(request, '❌ Tu cuenta ha expirado. Contacta al administrador para renovarla.')
                 return render(request, 'login.html')
-        
-        # Verificar si el usuario está activo (fecha_baja)
-        if user.usuario.fecha_baja and user.usuario.fecha_baja < timezone.now():
-            messages.error(request, '❌ Tu cuenta ha expirado. Contacta al administrador para renovarla.')
+        else:
+            # Esto no debería pasar porque get_or_create lo maneja, pero por seguridad
+            logger.warning(f"Usuario {email} no tiene perfil después de get_or_create")
+            messages.error(request, 'Error en la configuración de tu perfil. Contacta al administrador.')
             return render(request, 'login.html')
         
-        # Enviar código de verificación
+        # Mensaje de bienvenida si es nuevo
+        if creado:
+            if email == CORREO_ESPECIAL:
+                messages.success(request, '✨ ¡Bienvenido Administrador! Se ha creado tu cuenta automáticamente.')
+            else:
+                messages.info(request, '📝 Se ha creado tu cuenta automáticamente. ¡Bienvenido a la biblioteca!')
+        
+        # Enviar código de verificación (ASÍNCRONO - no bloquea)
         try:
-            enviar_codigo_verificacion(user)
+            enviar_codigo_async(user)
+            logger.info(f"Código de verificación enviado a {email} (modo asíncrono)")
         except Exception as e:
-            logger.error(f"Error enviando código a {email}: {e}")
+            logger.error(f"Error al iniciar envío de código a {email}: {e}")
             messages.error(request, '❌ Error al enviar el código. Intenta nuevamente.')
             return render(request, 'login.html')
         
@@ -195,10 +216,8 @@ def verificar_codigo_view(request):
                 login(request, user)
                 
                 # Limpiar datos de sesión
-                if 'verificacion_email' in request.session:
-                    del request.session['verificacion_email']
-                if 'verificacion_timestamp' in request.session:
-                    del request.session['verificacion_timestamp']
+                request.session.pop('verificacion_email', None)
+                request.session.pop('verificacion_timestamp', None)
                 
                 messages.success(request, f'¡Bienvenido/a {user.first_name or user.username}! 👋')
                 
@@ -208,12 +227,22 @@ def verificar_codigo_view(request):
                 else:
                     return redirect('inicio')
             else:
+                # Registrar intento fallido
+                ip = request.META.get('REMOTE_ADDR')
+                if ip not in intentos_fallidos:
+                    intentos_fallidos[ip] = 0
+                intentos_fallidos[ip] += 1
+                
                 messages.error(request, '❌ Código incorrecto o expirado. Solicita un nuevo código.')
                 return render(request, 'verificar_codigo.html', {'email': email})
                 
         except User.DoesNotExist:
             messages.error(request, '❌ Usuario no encontrado.')
             return redirect('home')
+        except Exception as e:
+            logger.error(f"Error en verificación de código: {str(e)}")
+            messages.error(request, 'Error al verificar el código. Intenta nuevamente.')
+            return render(request, 'verificar_codigo.html', {'email': email})
     
     return render(request, 'verificar_codigo.html', {'email': email})
 
@@ -227,11 +256,13 @@ def reenviar_codigo(request):
         
         try:
             user = User.objects.get(email=email)
-            enviar_codigo_verificacion(user)
+            # Envío asíncrono
+            enviar_codigo_async(user)
             return JsonResponse({'success': True, 'message': 'Código reenviado a tu correo'})
         except User.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Usuario no encontrado'})
         except Exception as e:
+            logger.error(f"Error reenviando código: {str(e)}")
             return JsonResponse({'success': False, 'error': str(e)})
     
     return JsonResponse({'success': False, 'error': 'Método no permitido'})
@@ -258,15 +289,25 @@ def cambiar_password(request):
         password_actual = data.get('password_actual')
         password_nuevo = data.get('password_nuevo')
         
+        if not password_actual or not password_nuevo:
+            return JsonResponse({'success': False, 'error': 'Faltan datos'})
+        
+        if len(password_nuevo) < 8:
+            return JsonResponse({'success': False, 'error': 'La nueva contraseña debe tener al menos 8 caracteres'})
+        
         if request.user.check_password(password_actual):
             request.user.set_password(password_nuevo)
             request.user.save()
             update_session_auth_hash(request, request.user)
+            logger.info(f"Contraseña cambiada para usuario: {request.user.username}")
             return JsonResponse({'success': True})
         else:
             return JsonResponse({'success': False, 'error': 'La contraseña actual es incorrecta'})
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Datos inválidos'})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.error(f"Error en cambiar_password: {str(e)}")
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'})
 
 
 @require_http_methods(["POST"])
@@ -277,7 +318,7 @@ def restablecer_password(request):
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
     try:
-        if request.user.usuario.tipo_usuario != 'Administrador':
+        if not hasattr(request.user, 'usuario') or request.user.usuario.tipo_usuario != 'Administrador':
             return JsonResponse({'success': False, 'error': 'No tienes permisos'}, status=403)
 
         data = json.loads(request.body)
@@ -289,13 +330,20 @@ def restablecer_password(request):
 
         from ..models import Usuario
         usuario = Usuario.objects.get(usuario_id=usuario_id)
+        
         if not usuario.user:
             return JsonResponse({'success': False, 'error': 'Usuario sin cuenta asociada'}, status=400)
 
         usuario.user.set_password(ci)
         usuario.user.save()
+        logger.info(f"Contraseña restablecida para usuario: {usuario.user.username} por admin: {request.user.username}")
+        
         return JsonResponse({'success': True, 'message': 'Contraseña restablecida correctamente'})
         
+    except Usuario.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Usuario no encontrado'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Datos inválidos'}, status=400)
     except Exception as e:
-        logger.error(f"Error al restablecer contraseña: {str(e)}")
-        return JsonResponse({'success': False, 'error': 'Error interno'}, status=500)
+        logger.error(f"Error al restablecer contraseña: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'}, status=500)
