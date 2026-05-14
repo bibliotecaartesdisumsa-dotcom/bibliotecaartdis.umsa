@@ -20,10 +20,11 @@ warnings.filterwarnings("ignore", module="admin_interface.templatetags")
 DEBUG = False
 ALLOWED_HOSTS = [
     'bibliotecaumsaartdis2026.pythonanywhere.com',
+    'bibliotecaartdisumsa-production.up.railway.app',
+    '.up.railway.app',
     '127.0.0.1',
     'localhost',
 ]
-
 # Application definition
 INSTALLED_APPS = [
     'admin_interface',
