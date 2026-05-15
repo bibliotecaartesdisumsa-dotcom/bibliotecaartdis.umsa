@@ -223,7 +223,7 @@ MEDIA_URL = '/media/'
 import logging
 logging.getLogger('cloudinary').setLevel(logging.INFO)
 
-# ============================================
+# ============================================--
 # CONFIGURACIÓN DE EMAIL (VERIFICACIÓN 2FA)ggg
 # ============================================
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
