@@ -16,7 +16,7 @@ import re
 from ..decorators import admin_required
 from ..models import (
     Usuario, Sugerencia, Categoria, Autor, VisitaLibro, Libro, Revista, Imagen
-)  # ✅ Eliminado create_or_update_user_profile
+)
 from ..forms import VisitaFilterForm, UsuarioForm, AutorForm
 
 logger = logging.getLogger(__name__)
@@ -24,14 +24,10 @@ logger = logging.getLogger(__name__)
 
 def generar_username_unico(correo, ci):
     """Genera un username único para el usuario de Django"""
-    # Limpiar correo (solo parte antes del @)
     correo_limpio = correo.split('@')[0]
-    # Eliminar caracteres especiales
     correo_limpio = re.sub(r'[^a-zA-Z0-9_]', '', correo_limpio)
     base = f"{ci}_{correo_limpio}"
-    # Limpiar caracteres especiales
     base = re.sub(r'[^a-zA-Z0-9_]', '', base)
-    # Acortar si es muy largo
     if len(base) > 140:
         base = base[:140]
     return base
@@ -69,52 +65,26 @@ def agregar_usuario(request):
             nro_celular = request.POST.get('nro_celular', '').strip()
             fecha_baja = request.POST.get('fecha_baja', '')
 
-            # Validaciones básicas
             if not nombres:
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'El nombre es obligatorio.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'El nombre es obligatorio.'})
-            
             if not ci or len(ci) < 5:
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'El CI debe tener al menos 5 dígitos.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'El CI debe tener al menos 5 dígitos.'})
-            
             if not nro_celular or len(nro_celular) != 8:
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'El número de celular debe tener 8 dígitos.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'El número de celular debe tener 8 dígitos.'})
-
             if tipo_usuario == 'Estudiante' and (not ru or len(ru) < 5):
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'Para estudiantes, el RU es obligatorio y debe tener al menos 5 dígitos.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'Para estudiantes, el RU es obligatorio y debe tener al menos 5 dígitos.'})
-
-            # Validar formato de email
             if '@' not in correo:
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'Ingrese un correo electrónico válido.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'Ingrese un correo electrónico válido.'})
-
-            # Verificar CI único
             if Usuario.objects.filter(ci=ci).exists():
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': f'El CI {ci} ya está registrado.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': f'El CI {ci} ya está registrado.'})
-            
-            # Verificar RU único (solo para estudiantes)
             if ru and Usuario.objects.filter(ru=ru).exists():
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'error', 'message': 'El RU ya está registrado.'}, status=400)
                 return render(request, 'agregar_usuario.html', {'mensaje': 'El RU ya está registrado.'})
 
             logger.info(f"Creando usuario: {nombres}, CI: {ci}, Correo: {correo}, Tipo: {tipo_usuario}")
 
             with transaction.atomic():
-                # Generar username único
                 username_unico = generar_username_unico(correo, ci)
                 
-                # Crear usuario de Django usando get_or_create para evitar duplicados
                 django_user, user_created = User.objects.get_or_create(
                     email=correo,
                     defaults={
@@ -124,13 +94,11 @@ def agregar_usuario(request):
                 )
                 
                 if not user_created:
-                    # Si ya existía, actualizar username si es necesario
                     if django_user.username != username_unico:
                         django_user.username = username_unico
                         django_user.save()
                     logger.info(f"Usuario Django ya existía: {correo}")
                 
-                # Crear perfil Usuario usando get_or_create
                 usuario, perfil_created = Usuario.objects.get_or_create(
                     user=django_user,
                     defaults={
@@ -150,7 +118,6 @@ def agregar_usuario(request):
                 )
                 
                 if not perfil_created:
-                    # Actualizar datos del perfil existente
                     usuario.nombres = nombres
                     usuario.apepat = apepat
                     usuario.apemat = apemat
@@ -167,22 +134,13 @@ def agregar_usuario(request):
                 else:
                     logger.info(f"Perfil Usuario creado exitosamente para: {correo}")
             
-            # Respuesta exitosa
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({
-                    'status': 'success', 
-                    'message': f'Usuario {nombres} creado exitosamente'
-                })
-            else:
-                return render(request, 'aviso.html', {
-                    'cabeza': 'Agregación de Usuario',
-                    'cuerpo': f"Se ha agregado el usuario: {nombres} ({tipo_usuario}). El acceso es con su correo institucional y código de verificación."
-                })
+            return render(request, 'aviso.html', {
+                'cabeza': 'Agregación de Usuario',
+                'cuerpo': f"Se ha agregado el usuario: {nombres} ({tipo_usuario}). El acceso es con su correo institucional y código de verificación."
+            })
                 
         except Exception as e:
             logger.error(f"Error general en agregar_usuario: {str(e)}", exc_info=True)
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'error', 'message': f'Error: {str(e)}'}, status=500)
             return render(request, 'agregar_usuario.html', {'mensaje': f'Error: {str(e)}'})
 
     return render(request, 'agregar_usuario.html')
@@ -232,8 +190,6 @@ def eliminar_usuario(request, usuario_id):
         usuario = get_object_or_404(Usuario, usuario_id=usuario_id)
         nombre = usuario.nombres
         usuario.delete()
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'status': 'success', 'message': f'Usuario {nombre} eliminado'})
         return redirect('lista_usuarios')
     return redirect('lista_usuarios')
 
@@ -287,7 +243,6 @@ def principal(request):
             'usuario': request.user.usuario if hasattr(request.user, 'usuario') else None
         }
 
-        # Estadísticas adicionales
         estadisticas = {
             'usuarios_activos': Usuario.objects.filter(esta_activo=True).count(),
             'usuarios_nuevos_mes': Usuario.objects.filter(
@@ -412,14 +367,11 @@ def aprobar_sugerencia(request, sugerencia_id):
 @login_required
 @admin_required
 def usuarios_activos(request):
-    """Vista para monitorear usuarios activos y sus lecturas"""
     from datetime import date, timedelta
     from django.db.models import Count
     
-    # Obtener todos los usuarios con sus visitas recientes
     usuarios = Usuario.objects.filter(esta_activo=True).prefetch_related('visitalibro_set')
     
-    # Datos para el dashboard
     stats = {
         'total_usuarios': Usuario.objects.count(),
         'usuarios_activos': Usuario.objects.filter(esta_activo=True).count(),
@@ -435,7 +387,6 @@ def usuarios_activos(request):
         ).order_by('-visitas_count')[:10]
     }
     
-    # Últimas visitas (últimas 50)
     ultimas_visitas = VisitaLibro.objects.select_related(
         'visitante', 'libro_visitado'
     ).order_by('-fecha_visualizacion')[:50]
@@ -452,17 +403,14 @@ def usuarios_activos(request):
 @login_required
 @admin_required
 def ver_historial_usuario(request, usuario_id):
-    """Ver el historial completo de un usuario específico"""
     from django.core.paginator import Paginator
     
     usuario = get_object_or_404(Usuario, usuario_id=usuario_id)
     
-    # Obtener visitas del usuario con información del libro
     visitas = VisitaLibro.objects.filter(
         visitante=usuario
     ).select_related('libro_visitado').order_by('-fecha_visualizacion')
     
-    # Estadísticas del usuario
     stats = {
         'total_visitas': visitas.count(),
         'libros_distintos': visitas.values('libro_visitado').distinct().count(),
@@ -470,7 +418,6 @@ def ver_historial_usuario(request, usuario_id):
         'ultimo_libro': visitas.first().libro_visitado.titulo if visitas.exists() else 'Ninguno',
     }
     
-    # Paginación
     paginator = Paginator(visitas, 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)

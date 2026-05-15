@@ -45,7 +45,7 @@ def enviar_codigo_async(user):
 def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
     """
     Crea un usuario automáticamente si no existe.
-    Usa get_or_create para evitar duplicados.
+    RESPETA el rol existente - NO lo sobrescribe.
     Retorna (user, created, error_message)
     """
     try:
@@ -53,7 +53,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
         user, created = User.objects.get_or_create(
             email=email,
             defaults={
-                'username': None,  # Se generará automáticamente
+                'username': None,
                 'password': None,
             }
         )
@@ -64,7 +64,6 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
             if not username_base:
                 username_base = f"user_{email.split('@')[0]}"
             
-            # Asegurar username único
             final_username = username_base
             counter = 1
             while User.objects.filter(username=final_username).exists():
@@ -72,16 +71,17 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
                 counter += 1
             
             user.username = final_username
-            user.set_unusable_password()  # Deshabilitar contraseña normal
+            user.set_unusable_password()
             user.first_name = email.split('@')[0].capitalize()
             user.save()
-            logger.info(f"✅ Usuario creado automáticamente: {email} (Username: {final_username})")
+            logger.info(f"✅ Usuario creado: {email}")
         
         # Verificar si tiene perfil de Usuario
         from ..models import Usuario
         from datetime import timedelta
         
-        tipo_usuario = 'Administrador' if email == correo_especial else 'Externo'
+        # Solo definir tipo_usuario para nuevos perfiles
+        nuevo_tipo = 'Administrador' if email == correo_especial else 'Externo'
         
         perfil, perfil_created = Usuario.objects.get_or_create(
             user=user,
@@ -93,7 +93,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
                 'correo': email,
                 'extension': 'LP',
                 'complemento': '',
-                'tipo_usuario': tipo_usuario,
+                'tipo_usuario': nuevo_tipo,
                 'ru': '',
                 'nro_celular': '',
                 'fecha_baja': timezone.now() + timedelta(days=365*5),
@@ -102,18 +102,28 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
         )
         
         if perfil_created:
-            logger.info(f"✅ Perfil Usuario creado para: {email} (Tipo: {tipo_usuario})")
+            logger.info(f"✅ Perfil creado para: {email} (Tipo: {perfil.tipo_usuario})")
         else:
-            # Actualizar datos si es necesario
-            if perfil.tipo_usuario != tipo_usuario:
-                perfil.tipo_usuario = tipo_usuario
+            # ✅ NO cambiar el tipo_usuario si ya existe
+            # Solo actualizar campos vacíos
+            actualizado = False
+            
+            if not perfil.nombres or perfil.nombres == '':
+                perfil.nombres = email.split('@')[0].capitalize()
+                actualizado = True
+            if not perfil.correo or perfil.correo == '':
+                perfil.correo = email
+                actualizado = True
+            if actualizado:
                 perfil.save()
-                logger.info(f"🔄 Tipo de usuario actualizado para: {email}")
+                logger.info(f"🔄 Perfil actualizado para: {email} (Rol conservado: {perfil.tipo_usuario})")
+            else:
+                logger.info(f"ℹ️ Perfil ya existía para: {email} (Rol: {perfil.tipo_usuario})")
         
         return user, created, None
         
     except Exception as e:
-        logger.error(f"❌ Error al crear/obtener usuario {email}: {str(e)}", exc_info=True)
+        logger.error(f"❌ Error con usuario {email}: {str(e)}", exc_info=True)
         return None, False, str(e)
 
 
@@ -160,7 +170,6 @@ def home(request):
                 messages.error(request, '❌ Tu cuenta ha expirado. Contacta al administrador para renovarla.')
                 return render(request, 'login.html')
         else:
-            # Esto no debería pasar porque get_or_create lo maneja, pero por seguridad
             logger.warning(f"Usuario {email} no tiene perfil después de get_or_create")
             messages.error(request, 'Error en la configuración de tu perfil. Contacta al administrador.')
             return render(request, 'login.html')
@@ -193,7 +202,6 @@ def home(request):
 
 def verificar_codigo_view(request):
     """PASO 2: Ingresar código de verificación"""
-    # Verificar que hay un email en sesión
     email = request.session.get('verificacion_email')
     if not email:
         messages.error(request, '❌ Por favor inicia el proceso de login nuevamente.')
@@ -210,23 +218,19 @@ def verificar_codigo_view(request):
             user = User.objects.get(email=email)
             
             if verificar_codigo(user, codigo):
-                # ✅ Especificar el backend de autenticación
                 user.backend = 'django.contrib.auth.backends.ModelBackend'
                 login(request, user)
                 
-                # Limpiar datos de sesión
                 request.session.pop('verificacion_email', None)
                 request.session.pop('verificacion_timestamp', None)
                 
                 messages.success(request, f'¡Bienvenido/a {user.first_name or user.username}! 👋')
                 
-                # Redirigir según el tipo de usuario
                 if hasattr(user, 'usuario') and user.usuario.tipo_usuario == 'Administrador':
                     return redirect('principal')
                 else:
                     return redirect('inicio')
             else:
-                # Registrar intento fallido
                 ip = request.META.get('REMOTE_ADDR')
                 if ip not in intentos_fallidos:
                     intentos_fallidos[ip] = 0
@@ -255,7 +259,6 @@ def reenviar_codigo(request):
         
         try:
             user = User.objects.get(email=email)
-            # Envío asíncrono
             enviar_codigo_async(user)
             return JsonResponse({'success': True, 'message': 'Código reenviado a tu correo'})
         except User.DoesNotExist:
