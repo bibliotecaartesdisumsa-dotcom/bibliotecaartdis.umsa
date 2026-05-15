@@ -222,6 +222,8 @@ STATICFILES_DIRS = [
 ]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# settings.py - Configuración de Cloudinary
+
 # ============================================
 # CONFIGURACIÓN DE CLOUDINARY
 # ============================================
@@ -240,6 +242,7 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
+# Usar Cloudinary Storage
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
 
