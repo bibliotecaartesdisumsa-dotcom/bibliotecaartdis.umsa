@@ -285,7 +285,7 @@ SESSION_COOKIE_AGE = 3600
 
 # ============================================
 # CONFIGURACIONES ADICIONALES
-# ============================================
+# ============================================ddd
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SILENCED_SYSTEM_CHECKS = ['security.W019']
 IMPORT_EXPORT_USE_TRANSACTIONS = True
