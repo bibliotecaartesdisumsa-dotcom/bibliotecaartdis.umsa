@@ -6,13 +6,66 @@ from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
+from django.core.files.base import ContentFile
 import logging
+import io
 
 from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
 from ..forms import RevistaForm, ColeccionForm, ImagenForm
 
+# Importar PyPDF2 para compresión de PDFs
+try:
+    from PyPDF2 import PdfReader, PdfWriter
+    PDF_COMPRESSION_AVAILABLE = True
+except ImportError:
+    PDF_COMPRESSION_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("PyPDF2 no instalado. La compresión automática de PDF no estará disponible.")
+
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# FUNCIÓN DE COMPRESIÓN DE PDF
+# ============================================
+def comprimir_pdf(archivo_pdf):
+    """
+    Comprime un PDF automáticamente usando PyPDF2
+    Retorna el archivo comprimido o el original si no se pudo comprimir
+    """
+    if not PDF_COMPRESSION_AVAILABLE:
+        logger.warning("PyPDF2 no disponible, no se puede comprimir el PDF")
+        return archivo_pdf
+    
+    try:
+        # Leer el PDF original
+        reader = PdfReader(archivo_pdf)
+        writer = PdfWriter()
+        
+        # Copiar todas las páginas comprimiendo contenido
+        for pagina in reader.pages:
+            pagina.compress_content_streams()  # Esto comprime el contenido
+            writer.add_page(pagina)
+        
+        # Guardar en memoria
+        output = io.BytesIO()
+        writer.write(output)
+        output.seek(0)
+        
+        # Crear nuevo archivo comprimido
+        nombre_original = archivo_pdf.name
+        # Cambiar extensión si es necesario
+        if not nombre_original.lower().endswith('.pdf'):
+            nombre_original += '.pdf'
+        nombre_comprimido = f"comprimido_{nombre_original}"
+        
+        return ContentFile(output.read(), name=nombre_comprimido)
+        
+    except Exception as e:
+        logger.error(f"Error comprimiendo PDF: {str(e)}")
+        return archivo_pdf  # Devolver original si falla
+
 
 # ==================== CRUD Libros ====================
 @login_required
@@ -35,6 +88,7 @@ def listar_libros(request):
 def agregar_libro(request):
     autores = Autor.objects.all()
     categorias = Categoria.objects.all()
+    
     if request.method == 'POST':
         try:
             titulo = request.POST.get('titulo')
@@ -51,14 +105,53 @@ def agregar_libro(request):
                 titulo=titulo, edicion=edicion, tipo=tipo, categoria=categoria,
                 descripcion=descripcion, pdf_url=pdf_url
             )
+            
+            # Portada
             if 'portada' in request.FILES:
                 nuevo_libro.img_portada = request.FILES['portada']
+                logger.info(f"Portada agregada: {request.FILES['portada'].name}")
+            
+            # ============================================
+            # MANEJO DE PDF CON COMPRESIÓN AUTOMÁTICA
+            # ============================================
             if 'pdf' in request.FILES:
-                nuevo_libro.pdf = request.FILES['pdf']
+                pdf_original = request.FILES['pdf']
+                tamaño_mb = pdf_original.size / (1024 * 1024)
+                
+                # Límite de Cloudinary: 10 MB
+                if tamaño_mb > 10:
+                    logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Comprimiendo...")
+                    
+                    if PDF_COMPRESSION_AVAILABLE:
+                        try:
+                            pdf_comprimido = comprimir_pdf(pdf_original)
+                            nuevo_libro.pdf = pdf_comprimido
+                            
+                            # Verificar tamaño después de comprimir
+                            tamaño_final = nuevo_libro.pdf.size / (1024 * 1024)
+                            logger.info(f"✅ PDF comprimido de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
+                            
+                            if tamaño_final > 10:
+                                messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Puede que no se muestre correctamente en Cloudinary.")
+                        except Exception as e:
+                            logger.error(f"Error en compresión: {e}")
+                            nuevo_libro.pdf = pdf_original
+                            messages.warning(request, "No se pudo comprimir el PDF. Se guardó original.")
+                    else:
+                        nuevo_libro.pdf = pdf_original
+                        messages.warning(request, f"El PDF pesa {tamaño_mb:.1f}MB. Instale PyPDF2 para compresión automática.")
+                else:
+                    nuevo_libro.pdf = pdf_original
+                    logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite")
+            
+            # Autorización
             if 'autorizacion' in request.FILES:
                 nuevo_libro.archivo_autorizacion = request.FILES['autorizacion']
+                logger.info(f"Archivo de autorización agregado: {request.FILES['autorizacion'].name}")
+            
             nuevo_libro.save()
 
+            # Agregar nuevo autor si se proporcionó
             nuevo_autor_nombre = request.POST.get('nombre_autor')
             if nuevo_autor_nombre and nuevo_autor_nombre.strip():
                 autor_existente = Autor.objects.filter(nombre=nuevo_autor_nombre).first()
@@ -68,25 +161,34 @@ def agregar_libro(request):
                     nuevo_autor = Autor.objects.create(nombre=nuevo_autor_nombre)
                     nuevo_libro.autores.add(nuevo_autor)
 
+            # Agregar autores seleccionados
             for autor_id in autores_seleccionados:
                 try:
                     autor = Autor.objects.get(pk=autor_id)
                     nuevo_libro.autores.add(autor)
                 except:
                     pass
+            
+            # Agregar categorías seleccionadas
             for categoria_id in categorias_seleccionadas:
                 try:
                     cat = Categoria.objects.get(pk=categoria_id)
                     nuevo_libro.categorias.add(cat)
                 except:
                     pass
+            
+            # Agregar palabras clave
             for palabra in palabras_claves:
                 if palabra.strip():
                     nuevo_libro.agregar_palabras_claves(palabra.strip())
+            
+            logger.info(f"Libro '{titulo}' creado exitosamente por {request.user.username}")
             return JsonResponse({'success': True, 'message': 'Libro agregado', 'libro_id': nuevo_libro.id_libro})
+            
         except Exception as e:
-            logger.error(f"Error agregando libro: {str(e)}")
+            logger.error(f"Error agregando libro: {str(e)}", exc_info=True)
             return JsonResponse({'success': False, 'error': str(e)})
+    
     context = {'autores': autores, 'categorias': categorias}
     return render(request, 'agregar_libro.html', context)
 
@@ -103,11 +205,23 @@ def editar_libro(request, libro_id):
             libro.descripcion = request.POST.get('descripcion', '').strip()
             libro.categoria = request.POST.get('categoria')
             libro.categorias.set(request.POST.getlist('categorias'))
+            
+            # Manejo de PDF con compresión en edición
             if 'pdf' in request.FILES:
-                libro.pdf = request.FILES['pdf']
-                libro.pdf_url = ''
+                pdf_original = request.FILES['pdf']
+                tamaño_mb = pdf_original.size / (1024 * 1024)
+                
+                if tamaño_mb > 10 and PDF_COMPRESSION_AVAILABLE:
+                    logger.info(f"Comprimiendo PDF en edición: {tamaño_mb:.1f}MB")
+                    pdf_comprimido = comprimir_pdf(pdf_original)
+                    libro.pdf = pdf_comprimido
+                    libro.pdf_url = ''
+                else:
+                    libro.pdf = pdf_original
+                    libro.pdf_url = ''
             else:
                 libro.pdf_url = request.POST.get('pdf_url', '').strip()
+            
             if 'portada' in request.FILES:
                 libro.img_portada = request.FILES['portada']
             if 'autorizacion' in request.FILES:
@@ -120,10 +234,13 @@ def editar_libro(request, libro_id):
                     libro.autores.clear()
             libro.palabra_clave = request.POST.get('palabras_claves', '')
             libro.save()
+            
+            logger.info(f"Libro '{libro.titulo}' actualizado por {request.user.username}")
             return JsonResponse({'success': True, 'message': 'Libro actualizado'})
         except Exception as e:
-            logger.error(f"Error editando libro: {str(e)}")
+            logger.error(f"Error editando libro: {str(e)}", exc_info=True)
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
     context = {
         'libro': libro,
         'autores': Autor.objects.all(),
@@ -137,7 +254,9 @@ def editar_libro(request, libro_id):
 def eliminar_libro(request, libro_id):
     libro = get_object_or_404(Libro, pk=libro_id)
     if request.method == 'POST':
+        titulo = libro.titulo
         libro.delete()
+        logger.info(f"Libro '{titulo}' eliminado por {request.user.username}")
         return redirect('listar_libros')
 
 
@@ -146,6 +265,7 @@ def cambiar_estado_descarga(request, libro_id):
     libro = get_object_or_404(Libro, id_libro=libro_id)
     libro.descarga_autorizada = not libro.descarga_autorizada
     libro.save()
+    logger.info(f"Estado de descarga del libro '{libro.titulo}' cambiado a {libro.descarga_autorizada}")
     return redirect('listar_libros')
 
 
@@ -156,6 +276,7 @@ def eliminar_autorizacion(request, libro_id):
         libro.archivo_autorizacion.delete(save=False)
         libro.archivo_autorizacion = None
         libro.save()
+        logger.info(f"Autorización eliminada para libro '{libro.titulo}'")
         return JsonResponse({'success': True, 'message': 'Autorización eliminada'})
     return JsonResponse({'success': False, 'message': 'No hay autorización'}, status=405)
 
@@ -312,7 +433,7 @@ def agregar_imagen(request):
             descripcion = request.POST.get('descripcion', '')
             autorImg = request.POST.get('autorImg')
             
-            # Crear imagen usando Cloudinary (no FileSystemStorage)
+            # Crear imagen usando Cloudinary
             nueva_imagen = Imagen(
                 titulo=titulo,
                 descripcion=descripcion,
