@@ -9,9 +9,11 @@ from .models import CodigoVerificacion
 
 logger = logging.getLogger(__name__)
 
+
 def generar_codigo_verificacion():
     """Genera un código aleatorio de 6 dígitos"""
     return f"{random.randint(100000, 999999)}"
+
 
 def obtener_url_sitio():
     """
@@ -20,47 +22,43 @@ def obtener_url_sitio():
     if settings.DEBUG:
         return 'http://127.0.0.1:8000'
     else:
-        # Para producción en Railway
-        if 'bibliotecaartdisumsa-production.up.railway.app' in settings.ALLOWED_HOSTS:
-            return 'https://bibliotecaartdisumsa-production.up.railway.app'
-        elif settings.ALLOWED_HOSTS and settings.ALLOWED_HOSTS[0] not in ['*', 'localhost', '127.0.0.1']:
-            return f"https://{settings.ALLOWED_HOSTS[0]}"
-        else:
-            return 'https://bibliotecaartdisumsa-production.up.railway.app'
+        return 'https://bibliotecaartdisumsa-production.up.railway.app'
+
 
 def enviar_codigo_verificacion(usuario):
     """
-    Envía un código de verificación al email del usuario
+    Envía un código de verificación al email del usuario usando Resend
     Retorna el objeto CodigoVerificacion creado o None si hay error
     """
     try:
         # Eliminar códigos anteriores no usados y expirados del mismo usuario
         CodigoVerificacion.objects.filter(
-            usuario=usuario, 
+            usuario=usuario,
             usado=False,
             expira_en__lt=timezone.now()
         ).delete()
-        
+
         # Generar nuevo código
         codigo = generar_codigo_verificacion()
         expiracion = timezone.now() + timedelta(minutes=10)
-        
+
         # Guardar en base de datos
         codigo_obj = CodigoVerificacion.objects.create(
             usuario=usuario,
             codigo=codigo,
             expira_en=expiracion
         )
-        
+
         # Obtener URL dinámica del sitio
         sitio_url = obtener_url_sitio()
-        
+        nombre_usuario = usuario.first_name or usuario.username or "Usuario"
+
         # Construir mensaje de email
         asunto = "🔐 Código de verificación - Biblioteca ARTyDIS"
-        
+
         # Versión texto plano (fallback)
         mensaje_texto = f"""
-Hola {usuario.first_name or usuario.username},
+Hola {nombre_usuario},
 
 Has solicitado acceder a la Biblioteca Digital ARTyDIS.
 
@@ -70,13 +68,13 @@ Este código es válido por 10 minutos.
 
 Accede a: {sitio_url}
 
-Si no solicitaste este código, puedes ignorar este mensaje.
+Si no solicitaste este código, ignora este mensaje.
 
 ---
 Biblioteca ARTyDIS - Carrera de Artes y Diseño Gráfico
 Universidad Mayor de San Andrés
 """
-        
+
         # Versión HTML con diseño moderno
         mensaje_html = f"""
 <!DOCTYPE html>
@@ -299,7 +297,7 @@ Universidad Mayor de San Andrés
         <!-- Body -->
         <div class="email-body">
             <div class="greeting">
-                ¡Hola, {usuario.first_name or usuario.username}! 👋
+                ¡Hola, {nombre_usuario}! 👋
             </div>
             
             <div class="message">
@@ -346,8 +344,8 @@ Universidad Mayor de San Andrés
 </body>
 </html>
 """
-        
-        # ✅ CORREGIDO: Enviar email SIN el argumento 'timeout'
+
+        # Enviar email usando el backend de Django (que ahora usa Resend)
         send_mail(
             asunto,
             mensaje_texto,
@@ -356,13 +354,14 @@ Universidad Mayor de San Andrés
             fail_silently=False,
             html_message=mensaje_html
         )
-        
+
         logger.info(f"Código de verificación enviado exitosamente a {usuario.email}")
         return codigo_obj
-        
+
     except Exception as e:
         logger.error(f"Error al enviar código de verificación a {usuario.email}: {str(e)}", exc_info=True)
         return None
+
 
 def verificar_codigo(usuario, codigo_ingresado):
     """
@@ -376,14 +375,14 @@ def verificar_codigo(usuario, codigo_ingresado):
             usado=False,
             expira_en__gt=timezone.now()
         ).latest('creado_en')
-        
+
         # Marcar como usado
         codigo_obj.usado = True
         codigo_obj.save()
-        
+
         logger.info(f"Código verificado exitosamente para {usuario.email}")
         return True
-        
+
     except CodigoVerificacion.DoesNotExist:
         logger.warning(f"Código de verificación inválido o expirado para {usuario.email}")
         return False

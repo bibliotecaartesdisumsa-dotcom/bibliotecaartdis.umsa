@@ -222,8 +222,6 @@ STATICFILES_DIRS = [
 ]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# settings.py - Configuración de Cloudinary
-
 # ============================================
 # CONFIGURACIÓN DE CLOUDINARY
 # ============================================
@@ -250,18 +248,18 @@ MEDIA_URL = '/media/'
 # CONFIGURACIÓN DE EMAIL CON RESEND
 # ============================================
 
-# Configurar API Key de Resend
-RESEND_API_KEY = os.getenv('RESEND_API_KEY', 're_M9BFWHyM_3kioxxBxW55dJRa5PQFz7gZE')
+# Configurar Resend con tu API Key
+RESEND_API_KEY = 're_M9BFWHyM_3kioxxBxW55dJRa5PQFz7gZE'
 resend.api_key = RESEND_API_KEY
 
-# Email backend con Resend (funciona en Railway)
+# Email backend con Resend
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.resend.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'resend'
 EMAIL_HOST_PASSWORD = RESEND_API_KEY
-DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
+DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <onboarding@resend.dev>'
 EMAIL_TIMEOUT = 30
 
 # ============================================
@@ -291,7 +289,6 @@ IMPORT_EXPORT_SKIP_ADMIN_LOG = False
 
 # ============================================
 # CONFIGURACIÓN PARA EVITAR SEÑALES DUPLICADAS
-# ==============================================
-
+# ============================================
 
 IS_MANAGEMENT_COMMAND = 'manage.py' in sys.argv[0] if sys.argv else False
