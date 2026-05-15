@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from datetime import date
-from django.db import models
 import io
 from PIL import Image, ImageDraw, ImageFont
 from django.core.files.base import ContentFile
@@ -110,58 +109,68 @@ class Usuario(models.Model):
         }
 
 
-# models.py - Reemplazar la señal existente
+# ============================================
+# SEÑAL COMENTADA - DESACTIVADA TEMPORALMENTE
+# ============================================
+# La señal está desactivada porque:
+# 1. El auth_views.py ya crea usuarios automáticamente con get_or_create
+# 2. El Admin también maneja la creación de perfiles automáticamente
+# 3. Esta señal causaba conflictos (duplicate key) al crear usuarios desde Admin
+#
+# Si se necesita reactivar en el futuro, descomentar el código siguiente:
+# ============================================
 
-@receiver(post_save, sender=User)
-def create_or_update_user_profile(sender, instance, created, **kwargs):
-    """
-    Crea o actualiza el perfil Usuario cuando se crea/actualiza un User
-    Usa get_or_create para evitar duplicados
-    """
-    if created:
-        # Para usuarios NUEVOS: crear perfil solo si no existe
-        perfil, created = Usuario.objects.get_or_create(
-            user=instance,
-            defaults={
-                'nombres': instance.first_name if instance.first_name else (instance.username if instance.username else "Usuario"),
-                'apepat': '-',
-                'apemat': '-',
-                'ci': instance.username if instance.username else 'SIN CI',
-                'correo': instance.email if instance.email else f'{instance.username}@example.com',
-                'extension': 'LP',
-                'tipo_usuario': 'Externo',
-                'nro_celular': '00000000'
-            }
-        )
-        if created:
-            print(f"✅ Perfil Usuario creado para: {instance.username}")
-        else:
-            print(f"⚠️ Perfil Usuario ya existía para: {instance.username}")
-    else:
-        # Para usuarios EXISTENTES: actualizar datos si es necesario
-        try:
-            perfil = instance.usuario
-            # Actualizar campos si cambiaron en User
-            if instance.first_name and perfil.nombres != instance.first_name:
-                perfil.nombres = instance.first_name
-            if instance.email and perfil.correo != instance.email:
-                perfil.correo = instance.email
-            perfil.save()
-            print(f"🔄 Perfil Usuario actualizado para: {instance.username}")
-        except Usuario.DoesNotExist:
-            # Si por alguna razón no existe, crearlo
-            Usuario.objects.create(
-                user=instance,
-                nombres=instance.first_name if instance.first_name else instance.username,
-                apepat='-',
-                apemat='-',
-                ci=instance.username,
-                correo=instance.email or f'{instance.username}@example.com',
-                extension='LP',
-                tipo_usuario='Externo',
-                nro_celular='00000000'
-            )
-            print(f"✅ Perfil Usuario recreado para: {instance.username}")
+# @receiver(post_save, sender=User)
+# def create_or_update_user_profile(sender, instance, created, **kwargs):
+#     """
+#     Crea o actualiza el perfil Usuario cuando se crea/actualiza un User
+#     Usa get_or_create para evitar duplicados
+#     """
+#     if created:
+#         # Para usuarios NUEVOS: crear perfil solo si no existe
+#         perfil, created = Usuario.objects.get_or_create(
+#             user=instance,
+#             defaults={
+#                 'nombres': instance.first_name if instance.first_name else (instance.username if instance.username else "Usuario"),
+#                 'apepat': '-',
+#                 'apemat': '-',
+#                 'ci': instance.username if instance.username else 'SIN CI',
+#                 'correo': instance.email if instance.email else f'{instance.username}@example.com',
+#                 'extension': 'LP',
+#                 'tipo_usuario': 'Externo',
+#                 'nro_celular': '00000000'
+#             }
+#         )
+#         if created:
+#             print(f"✅ Perfil Usuario creado para: {instance.username}")
+#         else:
+#             print(f"⚠️ Perfil Usuario ya existía para: {instance.username}")
+#     else:
+#         # Para usuarios EXISTENTES: actualizar datos si es necesario
+#         try:
+#             perfil = instance.usuario
+#             # Actualizar campos si cambiaron en User
+#             if instance.first_name and perfil.nombres != instance.first_name:
+#                 perfil.nombres = instance.first_name
+#             if instance.email and perfil.correo != instance.email:
+#                 perfil.correo = instance.email
+#             perfil.save()
+#             print(f"🔄 Perfil Usuario actualizado para: {instance.username}")
+#         except Usuario.DoesNotExist:
+#             # Si por alguna razón no existe, crearlo
+#             Usuario.objects.create(
+#                 user=instance,
+#                 nombres=instance.first_name if instance.first_name else instance.username,
+#                 apepat='-',
+#                 apemat='-',
+#                 ci=instance.username,
+#                 correo=instance.email or f'{instance.username}@example.com',
+#                 extension='LP',
+#                 tipo_usuario='Externo',
+#                 nro_celular='00000000'
+#             )
+#             print(f"✅ Perfil Usuario recreado para: {instance.username}")
+
 
 class Autor(models.Model):
     id_autor = models.AutoField(primary_key=True)
