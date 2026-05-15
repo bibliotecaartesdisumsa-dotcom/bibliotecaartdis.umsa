@@ -288,6 +288,7 @@ IMPORT_EXPORT_SKIP_ADMIN_LOG = False
 
 # ============================================
 # CONFIGURACIÓN PARA EVITAR SEÑALES DUPLICADAS
-# ============================================
+# ==============================================
+
 
 IS_MANAGEMENT_COMMAND = 'manage.py' in sys.argv[0] if sys.argv else False
