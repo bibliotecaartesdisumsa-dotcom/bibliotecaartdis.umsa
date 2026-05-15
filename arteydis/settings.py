@@ -245,21 +245,17 @@ DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
 
 # ============================================
-# CONFIGURACIÓN DE EMAIL CON RESEND
+# CONFIGURACIÓN DE EMAIL CON GMAIL (SSL)
 # ============================================
 
-# Configurar Resend con tu API Key
-RESEND_API_KEY = 're_M9BFWHyM_3kioxxBxW55dJRa5PQFz7gZE'
-resend.api_key = RESEND_API_KEY
-
-# Email backend con Resend
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.resend.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'resend'
-EMAIL_HOST_PASSWORD = RESEND_API_KEY
-DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <onboarding@resend.dev>'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465  # Puerto SSL
+EMAIL_USE_SSL = True  # Usar SSL en lugar de TLS
+EMAIL_USE_TLS = False
+EMAIL_HOST_USER = 'biblioteca.artesdis.umsa@gmail.com'
+EMAIL_HOST_PASSWORD = 'srgjsnwtcbkfuhjt'  # App Password sin espacios
+DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
 EMAIL_TIMEOUT = 30
 
 # ============================================
