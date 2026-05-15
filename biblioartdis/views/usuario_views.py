@@ -19,14 +19,16 @@ from ..models import (
 )
 from ..utils.text_cleaner import limpiar_busqueda
 from ..utils.chat_responses import ChatResponses
-from ..groq_config import get_ai_response  # ✅ CORRECTO
+from ..groq_config import get_ai_response
 
 try:
     import spacy
     nlp = spacy.load("es_core_news_sm")
 except:
     nlp = None
+
 logger = logging.getLogger(__name__)
+
 
 # ==================== Perfil e Historial ====================
 @login_required
@@ -39,6 +41,7 @@ def perfil(request):
         messages.error(request, "Tu cuenta no está configurada correctamente.")
         return redirect('inicio')
 
+
 @login_required
 def historial_visitas(request):
     try:
@@ -48,6 +51,7 @@ def historial_visitas(request):
     except Usuario.DoesNotExist:
         messages.error(request, "Error con tu perfil.")
         return redirect('inicio')
+
 
 @login_required
 def registrar_visita_libro(request):
@@ -66,8 +70,10 @@ def registrar_visita_libro(request):
                 visita.save()
             return JsonResponse({'mensaje': 'Visita registrada'})
         except Exception as e:
+            logger.error(f"Error registrando visita: {e}")
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Método no permitido'}, status=405)
+
 
 # ==================== Catálogo y Búsqueda ====================
 @login_required
@@ -100,6 +106,7 @@ def inicio(request):
         'filtro_actual': filtro,
         'categoria_id': categoria,
     })
+
 
 @login_required
 def novedades_libros(request):
@@ -166,6 +173,7 @@ def novedades_libros(request):
     }
     return render(request, 'novedades_libros.html', context)
 
+
 @login_required
 def libros_nivel(request, id_nivel):
     niveles = {1: 'NIVEL 1', 2: 'NIVEL 2', 3: 'NIVEL 3', 4: 'NIVEL 4'}
@@ -174,9 +182,11 @@ def libros_nivel(request, id_nivel):
     libros = Libro.objects.filter(categoria=categoria)
     return render(request, 'nivel.html', {'libros': libros, 'nivel': categoria, 'nomb_nivel': nomb_nivel.get(id_nivel, 'OTRO')})
 
+
 def catalogo(request):
     colecciones = Coleccion.objects.prefetch_related('revista_set').all()
     return render(request, 'catalogo.html', {'colecciones': colecciones})
+
 
 # ==================== Sugerencias de Usuario ====================
 @login_required
@@ -230,6 +240,7 @@ def sugerir_libro(request):
     # GET request - mostrar formulario
     return render(request, 'sugerir_libro.html')
 
+
 @login_required
 def listar_sugerencias_usuario(request):
     try:
@@ -237,8 +248,10 @@ def listar_sugerencias_usuario(request):
         sugerencias = Sugerencia.objects.filter(solicitante=usuario)
         return render(request, 'listar_sugerencias_usuario.html', {'sugerencias': sugerencias})
     except Exception as e:
+        logger.error(f"Error listando sugerencias: {e}")
         messages.error(request, "Error al acceder a su perfil.")
         return redirect('inicio')
+
 
 @login_required
 def descartar_sugerencia(request, sugerencia_id):
@@ -247,11 +260,13 @@ def descartar_sugerencia(request, sugerencia_id):
     sugerencia.save()
     return redirect('listar_sugerencias')
 
+
 # ==================== Visualización de PDF ====================
 @login_required
 def ver_pdf(request, libro_id):
     libro = get_object_or_404(Libro, id_libro=libro_id)
     return HttpResponse(libro.pdf, content_type='application/pdf')
+
 
 # ==================== Galería de Imágenes ====================
 def galeria_artistica(request):
@@ -259,9 +274,11 @@ def galeria_artistica(request):
     categorias = Categoria.objects.all()
     return render(request, 'galeria_artistica.html', {'imagenes': imagenes, 'categorias': categorias})
 
+
 def ver_imagen(request, id):
     imagen = get_object_or_404(Imagen, id=id)
     return render(request, 'ver_imagen.html', {'imagen': imagen})
+
 
 # ==================== Búsqueda Inteligente y Chatbot ====================
 def obtener_recomendaciones_personalizadas(usuario):
@@ -289,6 +306,7 @@ def obtener_recomendaciones_personalizadas(usuario):
         })
     return recomendaciones
 
+
 def buscar_libros(request):
     query = request.GET.get('q', '').strip()
     try:
@@ -300,8 +318,8 @@ def buscar_libros(request):
         if request.user.is_authenticated:
             try:
                 HistorialBusqueda.objects.create(usuario=request.user, termino_busqueda=query)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Error guardando historial: {e}")
 
         # Búsqueda por tipo
         if query.startswith('tipo:'):
@@ -333,13 +351,14 @@ def buscar_libros(request):
         respuesta_chat = ChatResponses.procesar_mensaje(query)
         if respuesta_chat.get("mensaje"):
             if respuesta_chat.get("accion") == "novedades":
-                ultimos_libros = Libro.objects.prefetch_related('autores', 'categorias').order_by('-fecha_registro')[:10]
+                # ✅ CORREGIDO: usar fecha_publicacion en lugar de fecha_registro
+                ultimos_libros = Libro.objects.prefetch_related('autores', 'categorias').order_by('-fecha_publicacion')[:10]
                 if ultimos_libros:
                     resultados = [{
                         'titulo': l.titulo,
                         'autores': ', '.join([a.nombre for a in l.autores.all()]) or 'Autor desconocido',
                         'tipo': l.tipo,
-                        'fecha': l.fecha_registro.strftime('%d/%m/%Y'),
+                        'fecha': l.fecha_publicacion.strftime('%d/%m/%Y'),
                         'img_portada': l.img_portada.url if l.img_portada else '',
                         'descripcion': l.descripcion or '',
                         'pdf': l.pdf.url if l.pdf else '',
@@ -392,10 +411,13 @@ def buscar_libros(request):
         else:
             return JsonResponse([{'mensaje': f"No encontré resultados para '{query}'.", 'tipo': 'info'}], safe=False)
     except Exception as e:
+        logger.error(f"Error en buscar_libros: {e}")
         return JsonResponse([{'mensaje': "Error en la búsqueda.", 'tipo': 'error'}], safe=False)
+
 
 def chatbot_view(request):
     return render(request, 'chatbot.html')
+
 
 @login_required
 def obtener_novedades(request):
@@ -403,10 +425,12 @@ def obtener_novedades(request):
         ultimos_libros = Libro.objects.all().order_by('-fecha_publicacion')[:3]
         novedades = []
         for libro in ultimos_libros:
+            # ✅ CORREGIDO: categoria es un CharField, no tiene atributo nombre
+            categoria_nombre = libro.categoria if libro.categoria else 'Sin categoría'
             novedades.append({
                 'titulo': libro.titulo,
                 'autores': ', '.join([a.nombre for a in libro.autores.all()]) or 'Autor desconocido',
-                'categoria': libro.categoria.nombre if hasattr(libro.categoria, 'nombre') else libro.categoria,
+                'categoria': categoria_nombre,
                 'descripcion': libro.descripcion,
                 'pdf': libro.pdf.url if libro.pdf else '',
                 'descarga_autorizada': libro.descarga_autorizada,
@@ -416,6 +440,7 @@ def obtener_novedades(request):
             })
         return JsonResponse({'status': 'success', 'mensaje': 'Últimos libros añadidos:', 'libros': novedades})
     except Exception as e:
+        logger.error(f"Error en obtener_novedades: {e}")
         return JsonResponse({'status': 'error', 'mensaje': str(e)})
 
 
@@ -483,7 +508,7 @@ def chat_con_gemini(request):
                         termino_busqueda=f"[CHAT] {mensaje[:100]}"
                     )
                 except Exception as e:
-                    print(f"Error guardando historial: {e}")
+                    logger.warning(f"Error guardando historial de chat: {e}")
             
             return JsonResponse({'response': respuesta, 'success': True})
             

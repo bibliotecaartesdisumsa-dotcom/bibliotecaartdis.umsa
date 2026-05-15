@@ -4,7 +4,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
-from django.core.files.storage import FileSystemStorage
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 import logging
@@ -30,6 +29,7 @@ def listar_libros(request):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     return render(request, 'listar_libros.html', {'libros': page_obj, 'usuario': request.user})
+
 
 @admin_required
 def agregar_libro(request):
@@ -85,9 +85,11 @@ def agregar_libro(request):
                     nuevo_libro.agregar_palabras_claves(palabra.strip())
             return JsonResponse({'success': True, 'message': 'Libro agregado', 'libro_id': nuevo_libro.id_libro})
         except Exception as e:
+            logger.error(f"Error agregando libro: {str(e)}")
             return JsonResponse({'success': False, 'error': str(e)})
     context = {'autores': autores, 'categorias': categorias}
     return render(request, 'agregar_libro.html', context)
+
 
 @login_required
 @admin_required
@@ -120,6 +122,7 @@ def editar_libro(request, libro_id):
             libro.save()
             return JsonResponse({'success': True, 'message': 'Libro actualizado'})
         except Exception as e:
+            logger.error(f"Error editando libro: {str(e)}")
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
     context = {
         'libro': libro,
@@ -129,6 +132,7 @@ def editar_libro(request, libro_id):
     }
     return render(request, 'editar_libro.html', context)
 
+
 @login_required
 def eliminar_libro(request, libro_id):
     libro = get_object_or_404(Libro, pk=libro_id)
@@ -136,12 +140,14 @@ def eliminar_libro(request, libro_id):
         libro.delete()
         return redirect('listar_libros')
 
+
 @login_required
 def cambiar_estado_descarga(request, libro_id):
     libro = get_object_or_404(Libro, id_libro=libro_id)
     libro.descarga_autorizada = not libro.descarga_autorizada
     libro.save()
     return redirect('listar_libros')
+
 
 @login_required
 def eliminar_autorizacion(request, libro_id):
@@ -153,6 +159,7 @@ def eliminar_autorizacion(request, libro_id):
         return JsonResponse({'success': True, 'message': 'Autorización eliminada'})
     return JsonResponse({'success': False, 'message': 'No hay autorización'}, status=405)
 
+
 # ==================== CRUD Revistas ====================
 @login_required
 @admin_required
@@ -160,6 +167,7 @@ def listar_revistas(request):
     revistas = Revista.objects.all()
     colecciones = Coleccion.objects.all()
     return render(request, 'listar_revistas.html', {'revistas': revistas, 'colecciones': colecciones})
+
 
 @login_required
 @admin_required
@@ -187,12 +195,14 @@ def agregar_revista(request):
             messages.success(request, 'Revista agregada')
             return redirect('listar_revistas')
         except Exception as e:
+            logger.error(f"Error agregando revista: {str(e)}")
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({'success': False, 'message': str(e)}, status=400)
             messages.error(request, str(e))
             return redirect('agregar_revista')
     colecciones = Coleccion.objects.all().order_by('nomb_colecc')
     return render(request, 'agregar_revista.html', {'colecciones': colecciones, 'max_upload_size_mb': {'imagen': 5, 'pdf': 10}})
+
 
 @login_required
 @admin_required
@@ -205,11 +215,13 @@ def modificar_revista(request, id_revista):
                 revista = form.save()
                 return JsonResponse({'success': True, 'message': 'Revista actualizada', 'data': {'id': revista.id_revista}})
             except Exception as e:
+                logger.error(f"Error modificando revista: {str(e)}")
                 return JsonResponse({'success': False, 'message': str(e)}, status=500)
         else:
             return JsonResponse({'success': False, 'message': 'Errores en formulario', 'errors': form.errors}, status=400)
     form = RevistaForm(instance=revista)
     return render(request, 'modificar_revista.html', {'form': form, 'revista': revista, 'max_upload_size_mb': {'imagen': 5, 'pdf': 10}})
+
 
 @login_required
 @admin_required
@@ -219,6 +231,7 @@ def eliminar_revista(request, id_revista):
         revista.delete()
         return JsonResponse({'success': True})
     return JsonResponse({'success': False})
+
 
 @login_required
 @admin_required
@@ -231,8 +244,10 @@ def agregar_coleccion(request):
             )
             return JsonResponse({'success': True, 'id_coleccion': nueva_coleccion.id_coleccion, 'nomb_colecc': nueva_coleccion.nomb_colecc})
         except Exception as e:
+            logger.error(f"Error agregando colección: {str(e)}")
             return JsonResponse({'success': False, 'message': str(e)})
     return JsonResponse({'success': False, 'message': 'Método no permitido'})
+
 
 @login_required
 @admin_required
@@ -252,6 +267,7 @@ def modificar_coleccion(request, id_coleccion):
         form = ColeccionForm(instance=coleccion)
     return render(request, 'modificar_coleccion.html', {'form': form, 'coleccion': coleccion})
 
+
 @login_required
 @admin_required
 def eliminar_coleccion(request, id_coleccion):
@@ -260,6 +276,7 @@ def eliminar_coleccion(request, id_coleccion):
         coleccion.delete()
         return JsonResponse({'success': True})
     return JsonResponse({'success': False})
+
 
 @csrf_exempt
 @admin_required
@@ -271,6 +288,7 @@ def actualizar_orden_colecciones(request):
         return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error'}, status=400)
 
+
 # ==================== CRUD Imágenes ====================
 @login_required
 @admin_required
@@ -281,25 +299,35 @@ def listar_imagenes(request):
     page_obj = paginator.get_page(page_number)
     return render(request, 'lista_imagenes.html', {'page_obj': page_obj})
 
+
 @admin_required
 def agregar_imagen(request):
+    """
+    Agrega una imagen usando Cloudinary (no FileSystemStorage)
+    """
     categorias = Categoria.objects.all()
     if request.method == 'POST':
         try:
             titulo = request.POST.get('titulo')
             descripcion = request.POST.get('descripcion', '')
             autorImg = request.POST.get('autorImg')
-            img_portada = request.FILES['img_portada']
-            pdf = request.FILES.get('pdf', None)
-            marca_agua = request.POST.get('marca_agua', '')
-            fs = FileSystemStorage()
-            img_portada_name = fs.save(img_portada.name, img_portada)
-            pdf_name = fs.save(pdf.name, pdf) if pdf else None
+            
+            # Crear imagen usando Cloudinary (no FileSystemStorage)
             nueva_imagen = Imagen(
-                titulo=titulo, descripcion=descripcion, autorImg=autorImg,
-                img_portada=img_portada_name, pdf=pdf_name, marca_agua=marca_agua
+                titulo=titulo,
+                descripcion=descripcion,
+                autorImg=autorImg,
             )
+            
+            # Cloudinary maneja los archivos automáticamente
+            if 'img_portada' in request.FILES:
+                nueva_imagen.img_portada = request.FILES['img_portada']
+            if 'pdf' in request.FILES:
+                nueva_imagen.pdf = request.FILES['pdf']
+            
             nueva_imagen.save()
+            
+            # Agregar categorías
             categorias_seleccionadas = request.POST.getlist('categorias')
             for cat_id in categorias_seleccionadas:
                 try:
@@ -307,11 +335,17 @@ def agregar_imagen(request):
                     nueva_imagen.categorias.add(categoria)
                 except:
                     pass
+            
+            messages.success(request, 'Imagen agregada correctamente')
             return redirect('lista_imagenes')
+            
         except Exception as e:
+            logger.error(f"Error agregando imagen: {str(e)}")
             messages.error(request, f'Error: {str(e)}')
             return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': str(e)})
+    
     return render(request, 'agregar_imagen.html', {'categorias': categorias})
+
 
 @login_required
 @admin_required
@@ -323,23 +357,22 @@ def editar_imagen(request, id_imagen):
             imagen.titulo = request.POST.get('titulo')
             imagen.descripcion = request.POST.get('descripcion', '')
             imagen.autorImg = request.POST.get('autorImg')
-            imagen.marca_agua = request.POST.get('marca_agua', '')
+            
             if 'img_portada' in request.FILES:
-                if imagen.img_portada:
-                    imagen.img_portada.delete()
                 imagen.img_portada = request.FILES['img_portada']
             if 'pdf' in request.FILES:
-                if imagen.pdf:
-                    imagen.pdf.delete()
                 imagen.pdf = request.FILES['pdf']
+            
             imagen.save()
             imagen.categorias.set(request.POST.getlist('categorias'))
             messages.success(request, "Imagen actualizada")
             return redirect('lista_imagenes')
         except Exception as e:
+            logger.error(f"Error editando imagen: {str(e)}")
             messages.error(request, f'Error: {str(e)}')
             return render(request, 'editar_imagen.html', {'imagen': imagen, 'categorias': categorias})
     return render(request, 'editar_imagen.html', {'imagen': imagen, 'categorias': categorias})
+
 
 @admin_required
 def eliminar_imagen(request, pk):
@@ -350,26 +383,37 @@ def eliminar_imagen(request, pk):
         return redirect('lista_imagenes')
     return redirect('lista_imagenes')
 
+
 @login_required
 def editar_marca(request, id_imagen):
+    """
+    Edita la marca de agua de una imagen
+    Nota: Esto usa PIL, puede ser lento en producción
+    """
     from PIL import Image as PILImage
     import io
     from django.core.files.base import ContentFile
+    
     imagen = get_object_or_404(Imagen, pk=id_imagen)
     if request.method == 'POST':
-        if 'img_portada' in request.FILES:
-            imagen.img_portada = request.FILES['img_portada']
-        if 'marca_agua' in request.FILES:
-            marca_agua_file = request.FILES['marca_agua']
-            marca_agua = PILImage.open(marca_agua_file)
-            img_portada = PILImage.open(imagen.img_portada)
-            transparencia = 0.5
-            marca_agua.putalpha(int(255 * transparencia))
-            img_portada.paste(marca_agua, (0, 0), marca_agua)
-            img_io = io.BytesIO()
-            img_portada.save(img_io, format='PNG')
-            img_file = ContentFile(img_io.getvalue(), 'imagen_con_marca_agua.png')
-            imagen.img_portada = img_file
-        imagen.save()
+        try:
+            if 'img_portada' in request.FILES:
+                imagen.img_portada = request.FILES['img_portada']
+            if 'marca_agua' in request.FILES:
+                marca_agua_file = request.FILES['marca_agua']
+                marca_agua = PILImage.open(marca_agua_file)
+                img_portada = PILImage.open(imagen.img_portada)
+                transparencia = 0.5
+                marca_agua.putalpha(int(255 * transparencia))
+                img_portada.paste(marca_agua, (0, 0), marca_agua)
+                img_io = io.BytesIO()
+                img_portada.save(img_io, format='PNG')
+                img_file = ContentFile(img_io.getvalue(), 'imagen_con_marca_agua.png')
+                imagen.img_portada = img_file
+            imagen.save()
+            messages.success(request, "Marca de agua aplicada")
+        except Exception as e:
+            logger.error(f"Error aplicando marca de agua: {str(e)}")
+            messages.error(request, f'Error: {str(e)}')
         return redirect('lista_imagenes')
     return render(request, 'editar_marca.html', {'imagen': imagen})
