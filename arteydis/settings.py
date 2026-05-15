@@ -288,3 +288,14 @@ IMPORT_EXPORT_SKIP_ADMIN_LOG = False
 # ============================================
 
 IS_MANAGEMENT_COMMAND = 'manage.py' in sys.argv[0] if sys.argv else False
+
+# ============================================
+# CONFIGURACIÓN ADICIONAL PARA EMAIL
+# ============================================
+
+# Forzar el uso del backend de email
+EMAIL_USE_LOCALTIME = True
+
+# Configuración para evitar bloqueos de Gmail
+EMAIL_SSL_CERTFILE = None
+EMAIL_SSL_KEYFILE = None
