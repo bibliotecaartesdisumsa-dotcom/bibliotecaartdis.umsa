@@ -5,6 +5,7 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 import sys
+import resend
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -101,7 +102,7 @@ LOGGING = {
             'level': 'ERROR',
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'django_errors.log'),
-            'maxBytes': 10 * 1024 * 1024,  # 10 MB
+            'maxBytes': 10 * 1024 * 1024,
             'backupCount': 5,
             'formatter': 'default',
         },
@@ -243,23 +244,23 @@ DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
 
 # ============================================
-# CONFIGURACIÓN DE EMAIL - CORREGIDA
+# CONFIGURACIÓN DE EMAIL CON RESEND
 # ============================================
 
-# Usar SMTP con Gmail - ENVÍA EMAILS REALES
+# Configurar API Key de Resend
+RESEND_API_KEY = os.getenv('RESEND_API_KEY', 're_M9BFWHyM_3kioxxBxW55dJRa5PQFz7gZE')
+resend.api_key = RESEND_API_KEY
+
+# Email backend con Resend (funciona en Railway)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_HOST = 'smtp.resend.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'biblioteca.artesdis.umsa@gmail.com'
-EMAIL_HOST_PASSWORD = 'srgjsnwtcbkfuhjt'  # Tu App Password (con espacios o sin?)
+EMAIL_HOST_USER = 'resend'
+EMAIL_HOST_PASSWORD = RESEND_API_KEY
 DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
+EMAIL_TIMEOUT = 30
 
-# Timeout para evitar worker timeout
-EMAIL_TIMEOUT = 10
-
-# Opcional: Para más estabilidad
-EMAIL_USE_SSL = False
 # ============================================
 # CONFIGURACIONES DE SEGURIDAD PARA PRODUCCIÓN
 # ============================================
@@ -270,11 +271,6 @@ CSRF_COOKIE_SECURE = True
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
-# HSTS
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
-
 CSRF_TRUSTED_ORIGINS = [
     'https://bibliotecaartdisumsa-production.up.railway.app',
 ]
@@ -284,7 +280,7 @@ SESSION_COOKIE_AGE = 3600
 
 # ============================================
 # CONFIGURACIONES ADICIONALES
-# ============================================ddd
+# ============================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SILENCED_SYSTEM_CHECKS = ['security.W019']
 IMPORT_EXPORT_USE_TRANSACTIONS = True
