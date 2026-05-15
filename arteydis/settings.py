@@ -243,7 +243,7 @@ DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
 
 # ============================================
-# CONFIGURACIÓN DE EMAIL - MODIFICADA PARA PRODUCCIÓN (EMAILS REALES)
+# CONFIGURACIÓN DE EMAIL - CORREGIDA
 # ============================================
 
 # Usar SMTP con Gmail - ENVÍA EMAILS REALES
@@ -252,15 +252,14 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'biblioteca.artesdis.umsa@gmail.com'
-EMAIL_HOST_PASSWORD = 'chlbefsqxhtfclfp'  # App Password de Gmail
+EMAIL_HOST_PASSWORD = 'srgjsnwtcbkfuhjt'  # Tu App Password (con espacios o sin?)
 DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
 
-# Timeout para evitar worker timeout (MUY IMPORTANTE)
-EMAIL_TIMEOUT = 5  # Segundos - si tarda más, falla rápido y no bloquea
+# Timeout para evitar worker timeout
+EMAIL_TIMEOUT = 10
 
-# Opcional: Usar fail_silently=True en los envíos para no romper la app
-# Esto se configura en cada llamada a send_mail()
-
+# Opcional: Para más estabilidad
+EMAIL_USE_SSL = False
 # ============================================
 # CONFIGURACIONES DE SEGURIDAD PARA PRODUCCIÓN
 # ============================================
