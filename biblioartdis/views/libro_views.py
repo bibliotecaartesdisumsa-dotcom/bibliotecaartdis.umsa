@@ -7,8 +7,11 @@ from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import InMemoryUploadedFile
 import logging
 import io
+import tempfile
+import os
 
 from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
@@ -32,7 +35,7 @@ logger = logging.getLogger(__name__)
 def comprimir_pdf(archivo_pdf):
     """
     Comprime un PDF automáticamente usando PyPDF2
-    Retorna el archivo comprimido o el original si no se pudo comprimir
+    Retorna un InMemoryUploadedFile comprimido o el original si falla
     """
     if not PDF_COMPRESSION_AVAILABLE:
         logger.warning("PyPDF2 no disponible, no se puede comprimir el PDF")
@@ -45,22 +48,31 @@ def comprimir_pdf(archivo_pdf):
         
         # Copiar todas las páginas comprimiendo contenido
         for pagina in reader.pages:
-            pagina.compress_content_streams()  # Esto comprime el contenido
+            pagina.compress_content_streams()
             writer.add_page(pagina)
         
-        # Guardar en memoria
+        # Guardar en BytesIO
         output = io.BytesIO()
         writer.write(output)
         output.seek(0)
         
-        # Crear nuevo archivo comprimido
+        # Obtener nombre original
         nombre_original = archivo_pdf.name
-        # Cambiar extensión si es necesario
         if not nombre_original.lower().endswith('.pdf'):
             nombre_original += '.pdf'
-        nombre_comprimido = f"comprimido_{nombre_original}"
         
-        return ContentFile(output.read(), name=nombre_comprimido)
+        # Crear InMemoryUploadedFile
+        archivo_comprimido = InMemoryUploadedFile(
+            output,                    # archivo
+            'pdf',                     # field_name
+            nombre_original,           # name
+            'application/pdf',         # content_type
+            output.getbuffer().nbytes, # size
+            None                       # charset
+        )
+        
+        logger.info(f"✅ PDF comprimido exitosamente: {archivo_pdf.size} -> {output.getbuffer().nbytes} bytes")
+        return archivo_comprimido
         
     except Exception as e:
         logger.error(f"Error comprimiendo PDF: {str(e)}")
