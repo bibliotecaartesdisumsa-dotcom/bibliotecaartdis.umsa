@@ -33,7 +33,6 @@
         overflow: hidden;
     }
 
-    /* Header */
     .form-header {
         background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
         padding: 1.5rem 2rem;
@@ -61,12 +60,10 @@
         font-size: 0.85rem;
     }
 
-    /* Body */
     .form-body {
         padding: 2rem;
     }
 
-    /* Secciones */
     .form-section {
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
@@ -97,7 +94,6 @@
         margin: 0;
     }
 
-    /* Grid de campos */
     .form-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -148,7 +144,6 @@
         background-color: white;
     }
 
-    /* Área de palabras clave */
     .keywords-container {
         background: var(--bg-light);
         border-radius: 12px;
@@ -210,7 +205,6 @@
         cursor: pointer;
     }
 
-    /* Selectores múltiples */
     .multi-select-container {
         background: var(--bg-light);
         border-radius: 12px;
@@ -245,7 +239,6 @@
         background: white;
     }
 
-    /* Archivos */
     .file-upload-area {
         background: var(--bg-light);
         border: 2px dashed var(--border-light);
@@ -297,7 +290,6 @@
         text-decoration: none;
     }
 
-    /* Botón submit */
     .btn-submit {
         width: 100%;
         padding: 1rem;
@@ -321,7 +313,23 @@
         box-shadow: 0 10px 20px -5px rgba(245, 158, 11, 0.3);
     }
 
-    /* Responsive */
+    .compression-bar {
+        width: 100%;
+        height: 4px;
+        background: var(--border-light);
+        border-radius: 2px;
+        margin-top: 10px;
+        overflow: hidden;
+        display: none;
+    }
+
+    .compression-progress {
+        width: 0%;
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.3s ease;
+    }
+
     @media (max-width: 768px) {
         .form-grid {
             grid-template-columns: 1fr;
@@ -517,8 +525,11 @@
                             <div class="file-upload-area" onclick="document.getElementById('pdf').click()">
                                 <i class="fas fa-cloud-upload-alt"></i>
                                 <h5>Subir PDF</h5>
-                                <p>Formatos: PDF. Máx 10MB</p>
+                                <p>Formatos: PDF. Máx 10MB (se comprimirá automáticamente si es más grande)</p>
                                 <input type="file" id="pdf" name="pdf" accept="application/pdf" style="display: none;" onchange="previewPDF(this)">
+                            </div>
+                            <div class="compression-bar" id="compressionBar">
+                                <div class="compression-progress" id="compressionProgress"></div>
                             </div>
                             <div class="file-preview" id="pdfPreviewContainer" style="display: none;">
                                 <a id="pdfPreviewLink" href="#" target="_blank">
@@ -560,6 +571,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
 <script>
     // ============================================
     // PALABRAS CLAVE
@@ -642,6 +655,31 @@
     }
 
     // ============================================
+    // COMPRESIÓN DE PDF ANTES DE SUBIR
+    // ============================================
+    async function comprimirPDF(file, onProgress) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+            
+            // Guardar con compresión
+            const compressedBytes = await pdfDoc.save({
+                useObjectStreams: true,
+                addDefaultPage: false
+            });
+            
+            const compressedFile = new File([compressedBytes], file.name, {
+                type: 'application/pdf'
+            });
+            
+            return compressedFile;
+        } catch (error) {
+            console.error("Error comprimiendo PDF:", error);
+            return file; // Si falla, subir original
+        }
+    }
+
+    // ============================================
     // AGREGAR AUTOR
     // ============================================
     document.getElementById('agregarAutorBtn').addEventListener('click', async () => {
@@ -712,12 +750,48 @@
     });
 
     // ============================================
-    // ENVÍO DEL FORMULARIO
+    // ENVÍO DEL FORMULARIO CON COMPRESIÓN
     // ============================================
     document.getElementById('libroForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const submitBtn = document.getElementById('submitBtn');
+        const pdfInput = document.getElementById('pdf');
+        const compressionBar = document.getElementById('compressionBar');
+        const compressionProgress = document.getElementById('compressionProgress');
+        
+        // Verificar si hay PDF y si es grande (> 5 MB)
+        let pdfToUpload = null;
+        if (pdfInput.files.length > 0) {
+            const file = pdfInput.files[0];
+            const fileSizeMB = file.size / (1024 * 1024);
+            
+            if (fileSizeMB > 5) {
+                // Mostrar barra de progreso
+                compressionBar.style.display = 'block';
+                compressionProgress.style.width = '30%';
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Comprimiendo PDF...';
+                
+                // Comprimir el PDF
+                compressionProgress.style.width = '60%';
+                pdfToUpload = await comprimirPDF(file);
+                compressionProgress.style.width = '100%';
+                
+                // Pequeña pausa para mostrar la barra completa
+                await new Promise(r => setTimeout(r, 300));
+                compressionBar.style.display = 'none';
+                
+                // Reemplazar el archivo en el input
+                const newFileList = new DataTransfer();
+                newFileList.items.add(pdfToUpload);
+                pdfInput.files = newFileList.files;
+                
+                const newSizeMB = pdfToUpload.size / (1024 * 1024);
+                console.log(`PDF comprimido: ${fileSizeMB.toFixed(1)}MB → ${newSizeMB.toFixed(1)}MB`);
+            }
+        }
+        
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
         
@@ -752,17 +826,21 @@
                         removePDF();
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Libro';
+                        compressionBar.style.display = 'none';
+                        compressionProgress.style.width = '0%';
                     }
                 });
             } else {
                 Swal.fire('Error', data.error || 'Ocurrió un error al guardar', 'error');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Libro';
+                compressionBar.style.display = 'none';
             }
         } catch (error) {
             Swal.fire('Error', 'Error de conexión con el servidor', 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Libro';
+            compressionBar.style.display = 'none';
         }
     });
 </script>
