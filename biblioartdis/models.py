@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count
 
-# Importar Cloudinary
+# Importar Cloudinary (solo para imágenes y archivos pequeños)
 from cloudinary.models import CloudinaryField
 
 def get_fecha_baja_default():
@@ -225,6 +225,7 @@ class Libro(models.Model):
     edicion = models.CharField(max_length=50, blank=True, null=True)  
     categoria = models.CharField(max_length=15, choices=opciones_categ)
     
+    # Cloudinary SOLO para portadas (imágenes pequeñas)
     img_portada = CloudinaryField(
         'Portada',
         folder='biblioteca/portadas/',
@@ -233,12 +234,31 @@ class Libro(models.Model):
         blank=True
     )
     
+    # ⚠️ Cloudinary SOLO para PDFs pequeños (< 10 MB)
+    # Para PDFs grandes (> 10 MB) usar google_drive_url
     pdf = CloudinaryField(
         'PDF',
         folder='biblioteca/pdfs/',
         resource_type='auto',
         null=True,
         blank=True
+    )
+    
+    # ✅ NUEVO: Campo para URL de Google Drive (PDFs grandes)
+    google_drive_url = models.URLField(
+        'URL de Google Drive',
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Enlace de Google Drive para PDFs grandes (vista previa embed)'
+    )
+    
+    # URL externa alternativa (para otros servicios)
+    pdf_url = models.URLField(
+        max_length=500, 
+        blank=True, 
+        null=True,
+        help_text='URL externa del PDF (Google Drive, OneDrive, etc.)'
     )
     
     archivo_autorizacion = CloudinaryField(
@@ -254,7 +274,6 @@ class Libro(models.Model):
     descripcion = models.TextField(blank=True, null=True)
     palabra_clave = models.TextField(blank=True, null=True)
     descarga_autorizada = models.BooleanField(default=True)
-    pdf_url = models.URLField(max_length=500, blank=True, null=True)
     categorias = models.ManyToManyField(Categoria, blank=True)
 
     def agregar_palabras_claves(self, palabras):
@@ -263,6 +282,24 @@ class Libro(models.Model):
         palabras_claves_actuales.extend(nuevas_palabras)
         self.palabra_clave = ', '.join(palabras_claves_actuales)
         self.save()
+
+    def get_pdf_display_url(self):
+        """
+        Retorna la URL para mostrar el PDF en el template.
+        Prioridad: google_drive_url → pdf_url → pdf de Cloudinary
+        """
+        if self.google_drive_url:
+            # Convertir URL de Google Drive a embed si es necesario
+            if 'drive.google.com' in self.google_drive_url:
+                file_id = self.google_drive_url.split('/d/')[1].split('/')[0] if '/d/' in self.google_drive_url else None
+                if file_id:
+                    return f'https://drive.google.com/file/d/{file_id}/preview'
+            return self.google_drive_url
+        if self.pdf_url:
+            return self.pdf_url
+        if self.pdf:
+            return self.pdf.url
+        return None
 
     def __str__(self):
         try:
@@ -331,6 +368,14 @@ class Revista(models.Model):
         resource_type='auto',
         null=True,
         blank=True
+    )
+    
+    google_drive_url = models.URLField(
+        'URL de Google Drive',
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='Enlace de Google Drive para PDFs grandes'
     )
     
     url = models.URLField(max_length=200, blank=True, null=True)

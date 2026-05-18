@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import InMemoryUploadedFile
-import fitz  # PyMuPDF - ¡La mejor librería para comprimir PDFs!
+import fitz  # PyMuPDF - Para compresión de PDFs
 import logging
 import io
 import tempfile
@@ -110,11 +110,13 @@ def agregar_libro(request):
             autores_seleccionados = request.POST.getlist('autores')
             palabras_claves = request.POST.get('palabras_claves', '').split(',')
             pdf_url = request.POST.get('pdf_url')
+            google_drive_url = request.POST.get('google_drive_url')  # ✅ NUEVO
             categorias_seleccionadas = request.POST.getlist('categorias')
             
             nuevo_libro = Libro(
                 titulo=titulo, edicion=edicion, tipo=tipo, categoria=categoria,
-                descripcion=descripcion, pdf_url=pdf_url
+                descripcion=descripcion, pdf_url=pdf_url,
+                google_drive_url=google_drive_url  # ✅ NUEVO
             )
             
             # Portada
@@ -123,9 +125,14 @@ def agregar_libro(request):
                 logger.info(f"Portada agregada: {request.FILES['portada'].name}")
             
             # ============================================
-            # MANEJO DE PDF CON COMPRESIÓN AUTOMÁTICA
+            # MANEJO DE PDF - PRIORIDAD: Google Drive > subida directa
             # ============================================
-            if 'pdf' in request.FILES:
+            # Si se proporcionó URL de Google Drive, no subir archivo
+            if google_drive_url:
+                logger.info(f"📄 Usando Google Drive URL: {google_drive_url}")
+                # No hacemos nada más, el PDF ya está en Drive
+                
+            elif 'pdf' in request.FILES:
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
@@ -142,7 +149,7 @@ def agregar_libro(request):
                         logger.info(f"✅ PDF comprimido de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
                         
                         if tamaño_final > 10:
-                            messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Puede que no se muestre correctamente en Cloudinary.")
+                            messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Considere usar Google Drive.")
                         else:
                             messages.success(request, f"✅ PDF comprimido exitosamente de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
                             
@@ -152,7 +159,9 @@ def agregar_libro(request):
                         messages.warning(request, "No se pudo comprimir el PDF. Se guardó original.")
                 else:
                     nuevo_libro.pdf = pdf_original
-                    logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite")
+                    logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite de Cloudinary")
+            else:
+                logger.info("📄 No se proporcionó PDF ni URL de Google Drive")
             
             # Autorización
             if 'autorizacion' in request.FILES:
@@ -216,8 +225,12 @@ def editar_libro(request, libro_id):
             libro.categoria = request.POST.get('categoria')
             libro.categorias.set(request.POST.getlist('categorias'))
             
-            # Manejo de PDF con compresión en edición
-            if 'pdf' in request.FILES:
+            # Actualizar URLs
+            libro.pdf_url = request.POST.get('pdf_url', '').strip()
+            libro.google_drive_url = request.POST.get('google_drive_url', '').strip()  # ✅ NUEVO
+            
+            # Manejo de PDF con compresión en edición (solo si no hay Google Drive)
+            if 'pdf' in request.FILES and not libro.google_drive_url:
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
@@ -231,12 +244,13 @@ def editar_libro(request, libro_id):
                     except Exception as e:
                         logger.error(f"Error comprimiendo en edición: {e}")
                         libro.pdf = pdf_original
-                        libro.pdf_url = ''
                 else:
                     libro.pdf = pdf_original
                     libro.pdf_url = ''
-            else:
-                libro.pdf_url = request.POST.get('pdf_url', '').strip()
+            elif 'pdf' in request.FILES and libro.google_drive_url:
+                # Si tiene Google Drive, ignorar el PDF subido
+                logger.info("Ignorando PDF subido porque ya tiene Google Drive URL")
+                messages.info(request, "El libro ya tiene un PDF en Google Drive. La subida fue ignorada.")
             
             if 'portada' in request.FILES:
                 libro.img_portada = request.FILES['portada']
@@ -324,7 +338,8 @@ def agregar_revista(request):
                 descripcion=request.POST.get('descripcion', '').strip(),
                 img_portada=request.FILES.get('img_portada'),
                 pdf=request.FILES.get('pdf'),
-                url=request.POST.get('url', '').strip()
+                url=request.POST.get('url', '').strip(),
+                google_drive_url=request.POST.get('google_drive_url', '').strip()  # ✅ NUEVO
             )
             revista.save()
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
