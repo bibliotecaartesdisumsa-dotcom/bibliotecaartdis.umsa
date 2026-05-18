@@ -16,65 +16,9 @@ import os
 from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
 from ..forms import RevistaForm, ColeccionForm, ImagenForm
+from ..drive_utils import subir_pdf_a_drive
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================
-# FUNCIÓN DE COMPRESIÓN DE PDF CON PyMuPDF
-# ============================================
-def comprimir_pdf(archivo_pdf):
-    """
-    Comprime un PDF usando PyMuPDF (fitz).
-    Esta función NO necesita Ghostscript ni dependencias externas.
-    """
-    nombre_original = archivo_pdf.name
-    logger.info(f"📄 Iniciando compresión para: {nombre_original}")
-
-    try:
-        # 1. Guardamos el archivo subido en un archivo temporal
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input_file:
-            for chunk in archivo_pdf.chunks():
-                tmp_input_file.write(chunk)
-            tmp_input_path = tmp_input_file.name
-
-        # 2. Abrimos el PDF con PyMuPDF
-        documento_pdf = fitz.open(tmp_input_path)
-        
-        # 3. Guardamos el PDF comprimido
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_output_file:
-            tmp_output_path = tmp_output_file.name
-            # garbage=4 limpia objetos basura, deflate=True comprime los datos
-            documento_pdf.save(tmp_output_path, garbage=4, deflate=True)
-            documento_pdf.close()
-
-        # 4. Leemos el archivo ya comprimido
-        with open(tmp_output_path, "rb") as f:
-            pdf_comprimido_en_bytes = f.read()
-        
-        # 5. Limpiamos los archivos temporales
-        os.unlink(tmp_input_path)
-        os.unlink(tmp_output_path)
-
-        # 6. Preparamos el archivo para Django/Cloudinary
-        compressed_file = io.BytesIO(pdf_comprimido_en_bytes)
-        archivo_final = InMemoryUploadedFile(
-            compressed_file,
-            'pdf',
-            nombre_original,
-            'application/pdf',
-            len(pdf_comprimido_en_bytes),
-            None
-        )
-
-        tamaño_original_mb = archivo_pdf.size / (1024 * 1024)
-        tamaño_final_mb = len(pdf_comprimido_en_bytes) / (1024 * 1024)
-        logger.info(f"✅ PDF comprimido: {tamaño_original_mb:.1f}MB → {tamaño_final_mb:.1f}MB")
-        return archivo_final
-
-    except Exception as e:
-        logger.error(f"❌ Error comprimiendo PDF con PyMuPDF: {str(e)}")
-        return archivo_pdf  # Devolver original si falla
 
 
 # ==================== CRUD Libros ====================
@@ -109,13 +53,13 @@ def agregar_libro(request):
             autores_seleccionados = request.POST.getlist('autores')
             palabras_claves = request.POST.get('palabras_claves', '').split(',')
             pdf_url = request.POST.get('pdf_url')
-            google_drive_url = request.POST.get('google_drive_url')  # ✅ NUEVO
+            google_drive_url = request.POST.get('google_drive_url')
             categorias_seleccionadas = request.POST.getlist('categorias')
             
             nuevo_libro = Libro(
                 titulo=titulo, edicion=edicion, tipo=tipo, categoria=categoria,
                 descripcion=descripcion, pdf_url=pdf_url,
-                google_drive_url=google_drive_url  # ✅ NUEVO
+                google_drive_url=google_drive_url
             )
             
             # Portada
@@ -124,43 +68,39 @@ def agregar_libro(request):
                 logger.info(f"Portada agregada: {request.FILES['portada'].name}")
             
             # ============================================
-            # MANEJO DE PDF - PRIORIDAD: Google Drive > subida directa
+            # MANEJO DE PDF - SUBIDA AUTOMÁTICA A DRIVE
             # ============================================
-            # Si se proporcionó URL de Google Drive, no subir archivo
-            if google_drive_url:
-                logger.info(f"📄 Usando Google Drive URL: {google_drive_url}")
-                # No hacemos nada más, el PDF ya está en Drive
-                
-            elif 'pdf' in request.FILES:
+            if 'pdf' in request.FILES:
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
-                # Límite de Cloudinary: 10 MB
+                # Para PDFs grandes (> 10 MB), subir a Google Drive automáticamente
                 if tamaño_mb > 10:
-                    logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Comprimiendo...")
+                    logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Subiendo a Google Drive...")
                     
                     try:
-                        pdf_comprimido = comprimir_pdf(pdf_original)
-                        nuevo_libro.pdf = pdf_comprimido
+                        # Subir a Drive automáticamente
+                        drive_url = subir_pdf_a_drive(pdf_original, titulo)
                         
-                        # Verificar tamaño después de comprimir
-                        tamaño_final = nuevo_libro.pdf.size / (1024 * 1024)
-                        logger.info(f"✅ PDF comprimido de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
-                        
-                        if tamaño_final > 10:
-                            messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Considere usar Google Drive.")
+                        if drive_url:
+                            nuevo_libro.google_drive_url = drive_url
+                            nuevo_libro.pdf = None  # No guardar en Cloudinary
+                            logger.info(f"✅ PDF subido a Google Drive: {drive_url}")
+                            messages.success(request, f"✅ PDF subido automáticamente a Google Drive")
                         else:
-                            messages.success(request, f"✅ PDF comprimido exitosamente de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
+                            # Si falla Drive, guardar en Cloudinary
+                            logger.warning("Falló subida a Drive, guardando en Cloudinary...")
+                            nuevo_libro.pdf = pdf_original
+                            messages.warning(request, "No se pudo subir a Google Drive. Se guardó en Cloudinary.")
                             
                     except Exception as e:
-                        logger.error(f"Error en compresión: {e}")
+                        logger.error(f"Error subiendo a Drive: {e}")
                         nuevo_libro.pdf = pdf_original
-                        messages.warning(request, "No se pudo comprimir el PDF. Se guardó original.")
+                        messages.warning(request, "Error al subir a Google Drive. Se guardó en Cloudinary.")
                 else:
+                    # PDFs pequeños a Cloudinary
                     nuevo_libro.pdf = pdf_original
                     logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite de Cloudinary")
-            else:
-                logger.info("📄 No se proporcionó PDF ni URL de Google Drive")
             
             # Autorización
             if 'autorizacion' in request.FILES:
@@ -226,30 +166,29 @@ def editar_libro(request, libro_id):
             
             # Actualizar URLs
             libro.pdf_url = request.POST.get('pdf_url', '').strip()
-            libro.google_drive_url = request.POST.get('google_drive_url', '').strip()  # ✅ NUEVO
+            libro.google_drive_url = request.POST.get('google_drive_url', '').strip()
             
-            # Manejo de PDF con compresión en edición (solo si no hay Google Drive)
+            # Manejo de PDF en edición
             if 'pdf' in request.FILES and not libro.google_drive_url:
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
                 if tamaño_mb > 10:
-                    logger.info(f"Comprimiendo PDF en edición: {tamaño_mb:.1f}MB")
+                    logger.info(f"📄 PDF grande detectado en edición: {tamaño_mb:.1f}MB. Subiendo a Drive...")
                     try:
-                        pdf_comprimido = comprimir_pdf(pdf_original)
-                        libro.pdf = pdf_comprimido
-                        libro.pdf_url = ''
-                        logger.info(f"PDF comprimido en edición: {tamaño_mb:.1f}MB → {pdf_comprimido.size / (1024 * 1024):.1f}MB")
+                        drive_url = subir_pdf_a_drive(pdf_original, libro.titulo)
+                        if drive_url:
+                            libro.google_drive_url = drive_url
+                            libro.pdf = None
+                            messages.success(request, "PDF grande subido a Google Drive")
+                        else:
+                            libro.pdf = pdf_original
                     except Exception as e:
-                        logger.error(f"Error comprimiendo en edición: {e}")
+                        logger.error(f"Error subiendo a Drive: {e}")
                         libro.pdf = pdf_original
                 else:
                     libro.pdf = pdf_original
                     libro.pdf_url = ''
-            elif 'pdf' in request.FILES and libro.google_drive_url:
-                # Si tiene Google Drive, ignorar el PDF subido
-                logger.info("Ignorando PDF subido porque ya tiene Google Drive URL")
-                messages.info(request, "El libro ya tiene un PDF en Google Drive. La subida fue ignorada.")
             
             if 'portada' in request.FILES:
                 libro.img_portada = request.FILES['portada']
@@ -338,7 +277,7 @@ def agregar_revista(request):
                 img_portada=request.FILES.get('img_portada'),
                 pdf=request.FILES.get('pdf'),
                 url=request.POST.get('url', '').strip(),
-                google_drive_url=request.POST.get('google_drive_url', '').strip()  # ✅ NUEVO
+                google_drive_url=request.POST.get('google_drive_url', '').strip()
             )
             revista.save()
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
