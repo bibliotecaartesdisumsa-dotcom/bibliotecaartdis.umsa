@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 # FUNCIÓN DE COMPRESIÓN DE PDF
 # ============================================
 def comprimir_pdf(archivo_pdf):
-    """
-    Comprime un PDF usando Ghostscript (compresión REAL para Cloudinary)
-    """
     import subprocess
     import tempfile
     import os
@@ -43,64 +40,46 @@ def comprimir_pdf(archivo_pdf):
     import io
     
     try:
-        # Guardar archivo temporal de entrada
+        # Guardar archivo temporal
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_input:
             for chunk in archivo_pdf.chunks():
                 tmp_input.write(chunk)
             tmp_input_path = tmp_input.name
         
-        # Crear archivo temporal de salida
         tmp_output_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
         
         # Comprimir con Ghostscript
-        # -dPDFSETTINGS=/screen (máxima compresión para web)
-        # -dDownsampleColorImages=true
-        # -dColorImageResolution=72
         cmd = [
             'gs', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.4',
             '-dPDFSETTINGS=/screen', '-dNOPAUSE', '-dQUIET', '-dBATCH',
             '-dDownsampleColorImages=true', '-dColorImageResolution=72',
-            '-dGrayImageResolution=72', '-dMonoImageResolution=72',
             f'-sOutputFile={tmp_output_path}', tmp_input_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        subprocess.run(cmd, capture_output=True, check=True)
         
-        if result.returncode != 0:
-            logger.error(f"Error Ghostscript: {result.stderr}")
-            # Si falla, devolver original
-            return archivo_pdf
-        
-        # Leer archivo comprimido
+        # Leer comprimido
         with open(tmp_output_path, 'rb') as f:
-            contenido_comprimido = f.read()
+            contenido = f.read()
         
-        # Limpiar archivos temporales
+        # Limpiar
         os.unlink(tmp_input_path)
         os.unlink(tmp_output_path)
         
-        # Calcular porcentaje de compresión
-        tamaño_original_mb = archivo_pdf.size / (1024 * 1024)
-        tamaño_final_mb = len(contenido_comprimido) / (1024 * 1024)
-        logger.info(f"✅ Compresión Ghostscript: {tamaño_original_mb:.1f}MB → {tamaño_final_mb:.1f}MB")
-        
-        # Crear InMemoryUploadedFile
-        output = io.BytesIO(contenido_comprimido)
+        # Crear archivo para Cloudinary
+        output = io.BytesIO(contenido)
         nombre_original = archivo_pdf.name
         
         archivo_comprimido = InMemoryUploadedFile(
-            output,
-            'pdf',
-            nombre_original,
-            'application/pdf',
-            len(contenido_comprimido),
-            None
+            output, 'pdf', nombre_original, 'application/pdf',
+            len(contenido), None
         )
         
+        logger.info(f"✅ PDF comprimido: {archivo_pdf.size} -> {len(contenido)} bytes")
         return archivo_comprimido
         
     except Exception as e:
-        logger.error(f"Error en compresión Ghostscript: {str(e)}")
+        logger.error(f"Error Ghostscript: {e}")
         return archivo_pdf
 
 
