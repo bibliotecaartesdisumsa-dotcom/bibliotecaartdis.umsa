@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 from django.core.files.base import ContentFile
+import fitz 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 import logging
 import io
@@ -33,53 +34,56 @@ logger = logging.getLogger(__name__)
 # FUNCIÓN DE COMPRESIÓN DE PDF
 # ============================================
 def comprimir_pdf(archivo_pdf):
-    import subprocess
-    import tempfile
-    import os
-    from django.core.files.uploadedfile import InMemoryUploadedFile
-    import io
-    
+    """
+    Comprime un PDF usando PyMuPDF (fitz).
+    Esta función NO necesita Ghostscript en el servidor.
+    """
+    nombre_original = archivo_pdf.name
+    logger.info(f"📄 Iniciando compresión para: {nombre_original}")
+
     try:
-        # Guardar archivo temporal
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_input:
+        # 1. Guardamos el archivo subido en un archivo temporal para que PyMuPDF pueda leerlo
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input_file:
             for chunk in archivo_pdf.chunks():
-                tmp_input.write(chunk)
-            tmp_input_path = tmp_input.name
+                tmp_input_file.write(chunk)
+            tmp_input_path = tmp_input_file.name
+
+        # 2. ¡El corazón de la magia! Abrimos el PDF con PyMuPDF
+        documento_pdf = fitz.open(tmp_input_path)
         
-        tmp_output_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
+        # 3. Guardamos el PDF con las opciones de compresión más agresivas.
+        #    `garbage=4` limpia objetos basura. `deflate=True` comprime los flujos de datos.
+        #    Esto puede reducir significativamente el tamaño [citation:4][citation:6].
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_output_file:
+            tmp_output_path = tmp_output_file.name
+            # Aquí aplicamos la compresión
+            documento_pdf.save(tmp_output_path, garbage=4, deflate=True)
+            documento_pdf.close()
+
+        # 4. Leemos el archivo ya comprimido
+        with open(tmp_output_path, "rb") as f:
+            pdf_comprimido_en_bytes = f.read()
         
-        # Comprimir con Ghostscript
-        cmd = [
-            'gs', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.4',
-            '-dPDFSETTINGS=/screen', '-dNOPAUSE', '-dQUIET', '-dBATCH',
-            '-dDownsampleColorImages=true', '-dColorImageResolution=72',
-            f'-sOutputFile={tmp_output_path}', tmp_input_path
-        ]
-        
-        subprocess.run(cmd, capture_output=True, check=True)
-        
-        # Leer comprimido
-        with open(tmp_output_path, 'rb') as f:
-            contenido = f.read()
-        
-        # Limpiar
+        # 5. Limpiamos los archivos temporales
         os.unlink(tmp_input_path)
         os.unlink(tmp_output_path)
-        
-        # Crear archivo para Cloudinary
-        output = io.BytesIO(contenido)
-        nombre_original = archivo_pdf.name
-        
-        archivo_comprimido = InMemoryUploadedFile(
-            output, 'pdf', nombre_original, 'application/pdf',
-            len(contenido), None
+
+        # 6. Preparamos el archivo para que Django lo pueda guardar en Cloudinary
+        compressed_file = io.BytesIO(pdf_comprimido_en_bytes)
+        archivo_final = InMemoryUploadedFile(
+            compressed_file,            # archivo
+            'pdf',                      # field_name
+            nombre_original,            # file name
+            'application/pdf',          # content_type
+            len(pdf_comprimido_en_bytes), # size
+            None                        # charset
         )
-        
-        logger.info(f"✅ PDF comprimido: {archivo_pdf.size} -> {len(contenido)} bytes")
-        return archivo_comprimido
-        
+
+        logger.info(f"✅ ¡COMPRESIÓN EXITOSA! Tamaño original: {archivo_pdf.size} bytes -> Tamaño final: {len(pdf_comprimido_en_bytes)} bytes")
+        return archivo_final
+
     except Exception as e:
-        logger.error(f"Error Ghostscript: {e}")
+        logger.error(f"❌ Error fatal durante la compresión con PyMuPDF: {str(e)}")
         return archivo_pdf
 
 
