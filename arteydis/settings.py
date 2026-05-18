@@ -42,9 +42,6 @@ INSTALLED_APPS = [
     'cloudinary',
     'cloudinary_storage',
     
-    # Google Drive para PDFs grandes
-    'googledriveapi',  # ← Agregar esta línea
-    
     # Apps propias
     'biblioartdis.apps.BiblioartdisConfig',
     
