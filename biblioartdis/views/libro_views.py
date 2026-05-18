@@ -34,49 +34,74 @@ logger = logging.getLogger(__name__)
 # ============================================
 def comprimir_pdf(archivo_pdf):
     """
-    Comprime un PDF automáticamente usando PyPDF2
-    Retorna un InMemoryUploadedFile comprimido o el original si falla
+    Comprime un PDF usando Ghostscript (compresión REAL para Cloudinary)
     """
-    if not PDF_COMPRESSION_AVAILABLE:
-        logger.warning("PyPDF2 no disponible, no se puede comprimir el PDF")
-        return archivo_pdf
+    import subprocess
+    import tempfile
+    import os
+    from django.core.files.uploadedfile import InMemoryUploadedFile
+    import io
     
     try:
-        # Leer el PDF original
-        reader = PdfReader(archivo_pdf)
-        writer = PdfWriter()
+        # Guardar archivo temporal de entrada
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_input:
+            for chunk in archivo_pdf.chunks():
+                tmp_input.write(chunk)
+            tmp_input_path = tmp_input.name
         
-        # Copiar todas las páginas comprimiendo contenido
-        for pagina in reader.pages:
-            pagina.compress_content_streams()
-            writer.add_page(pagina)
+        # Crear archivo temporal de salida
+        tmp_output_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
         
-        # Guardar en BytesIO
-        output = io.BytesIO()
-        writer.write(output)
-        output.seek(0)
+        # Comprimir con Ghostscript
+        # -dPDFSETTINGS=/screen (máxima compresión para web)
+        # -dDownsampleColorImages=true
+        # -dColorImageResolution=72
+        cmd = [
+            'gs', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.4',
+            '-dPDFSETTINGS=/screen', '-dNOPAUSE', '-dQUIET', '-dBATCH',
+            '-dDownsampleColorImages=true', '-dColorImageResolution=72',
+            '-dGrayImageResolution=72', '-dMonoImageResolution=72',
+            f'-sOutputFile={tmp_output_path}', tmp_input_path
+        ]
         
-        # Obtener nombre original
-        nombre_original = archivo_pdf.name
-        if not nombre_original.lower().endswith('.pdf'):
-            nombre_original += '.pdf'
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"Error Ghostscript: {result.stderr}")
+            # Si falla, devolver original
+            return archivo_pdf
+        
+        # Leer archivo comprimido
+        with open(tmp_output_path, 'rb') as f:
+            contenido_comprimido = f.read()
+        
+        # Limpiar archivos temporales
+        os.unlink(tmp_input_path)
+        os.unlink(tmp_output_path)
+        
+        # Calcular porcentaje de compresión
+        tamaño_original_mb = archivo_pdf.size / (1024 * 1024)
+        tamaño_final_mb = len(contenido_comprimido) / (1024 * 1024)
+        logger.info(f"✅ Compresión Ghostscript: {tamaño_original_mb:.1f}MB → {tamaño_final_mb:.1f}MB")
         
         # Crear InMemoryUploadedFile
+        output = io.BytesIO(contenido_comprimido)
+        nombre_original = archivo_pdf.name
+        
         archivo_comprimido = InMemoryUploadedFile(
-            output,                    # archivo
-            'pdf',                     # field_name
-            nombre_original,           # name
-            'application/pdf',         # content_type
-            output.getbuffer().nbytes, # size
-            None                       # charset
+            output,
+            'pdf',
+            nombre_original,
+            'application/pdf',
+            len(contenido_comprimido),
+            None
         )
         
-        logger.info(f"✅ PDF comprimido exitosamente: {archivo_pdf.size} -> {output.getbuffer().nbytes} bytes")
         return archivo_comprimido
         
     except Exception as e:
-        logger.error(f"Error comprimiendo PDF: {str(e)}")
-        return archivo_pdf  # Devolver original si falla
+        logger.error(f"Error en compresión Ghostscript: {str(e)}")
+        return archivo_pdf
 
 
 # ==================== CRUD Libros ====================
