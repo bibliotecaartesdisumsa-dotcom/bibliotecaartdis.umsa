@@ -8,7 +8,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import InMemoryUploadedFile
-import fitz  # PyMuPDF - Para compresión de PDFs
 import logging
 import io
 import tempfile
