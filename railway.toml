@@ -1,10 +1,10 @@
-echo '[build]
-  builder = "NIXPACKS"
+﻿[build]
+builder = "NIXPACKS"
 
 [build.nixpacks]
-  system_packages = ["ghostscript"]
+system_packages = ["ghostscript"]
 
 [deploy]
-  startCommand = "gunicorn arteydis.wsgi:application --bind 0.0.0.0:$PORT"
-  healthcheckPath = "/"
-  restartPolicyType = "ON_FAILURE"' > railway.toml
+startCommand = "gunicorn arteydis.wsgi:application --bind 0.0.0.0:$PORT"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"
