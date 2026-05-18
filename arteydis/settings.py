@@ -25,7 +25,8 @@ ALLOWED_HOSTS = [
     '.up.railway.app',
     '127.0.0.1',
     'localhost',
-    'healthcheck.railway.app', 
+    'healthcheck.railway.app',
+    '0.0.0.0',
 ]
 
 # Application definition
