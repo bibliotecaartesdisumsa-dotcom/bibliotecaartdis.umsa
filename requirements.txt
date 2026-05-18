@@ -42,3 +42,4 @@ google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 httplib2
+PyPDF2==3.0.1
