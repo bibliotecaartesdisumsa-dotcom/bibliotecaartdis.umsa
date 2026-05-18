@@ -1,4 +1,4 @@
-[build]
+echo '[build]
   builder = "NIXPACKS"
 
 [build.nixpacks]
@@ -7,4 +7,4 @@
 [deploy]
   startCommand = "gunicorn arteydis.wsgi:application --bind 0.0.0.0:$PORT"
   healthcheckPath = "/"
-  restartPolicyType = "ON_FAILURE"
+  restartPolicyType = "ON_FAILURE"' > railway.toml
