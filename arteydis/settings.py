@@ -6,6 +6,7 @@ import cloudinary.uploader
 import cloudinary.api
 import sys
 import resend
+import json
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Cloudinary (solo para imágenes pequeñas)
+    # Cloudinary (solo para imágenes y PDFs pequeños)
     'cloudinary',
     'cloudinary_storage',
     
@@ -225,7 +226,7 @@ STATICFILES_DIRS = [
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ============================================
-# CONFIGURACIÓN DE CLOUDINARY (SOLO PARA PORTADAS)
+# CONFIGURACIÓN DE CLOUDINARY (SOLO PARA PORTADAS Y PDFS PEQUEÑOS)
 # ============================================
 
 cloudinary.config(
@@ -242,28 +243,29 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
-# Usar Cloudinary Storage SOLO para imágenes
+# Usar Cloudinary Storage SOLO para imágenes y PDFs pequeños
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
 
 # ============================================
-# CONFIGURACIÓN DE GOOGLE DRIVE (PARA PDFs GRANDES)
+# CONFIGURACIÓN DE GOOGLE DRIVE (PARA PDFS GRANDES)
 # ============================================
 
-# Ruta al archivo de credenciales JSON (lo descargarás de Google Cloud Console)
-# En Railway, usarás la variable de entorno
-GOOGLE_DRIVE_API_JSON_KEY_FILE = os.environ.get('GOOGLE_DRIVE_CREDENTIALS_JSON', 'credentials_drive.json')
+# Cargar credenciales desde variable de entorno (Railway)
+GOOGLE_DRIVE_CREDENTIALS_JSON = os.environ.get('GOOGLE_DRIVE_CREDENTIALS_JSON')
+if GOOGLE_DRIVE_CREDENTIALS_JSON:
+    try:
+        GOOGLE_DRIVE_CREDENTIALS = json.loads(GOOGLE_DRIVE_CREDENTIALS_JSON)
+    except json.JSONDecodeError:
+        GOOGLE_DRIVE_CREDENTIALS = None
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Error decodificando GOOGLE_DRIVE_CREDENTIALS_JSON")
+else:
+    GOOGLE_DRIVE_CREDENTIALS = None
 
-# ID de la carpeta donde se guardarán los PDFs (opcional)
+# ID de la carpeta de Google Drive (opcional)
 GOOGLE_DRIVE_FOLDER_ID = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
-
-# Configuración de Drive para Django
-DRIVE_STORAGE = {
-    'CLIENT_ID': os.environ.get('GOOGLE_DRIVE_CLIENT_ID'),
-    'CLIENT_SECRET': os.environ.get('GOOGLE_DRIVE_CLIENT_SECRET'),
-    'SCOPE': ['https://www.googleapis.com/auth/drive.file'],
-    'REDIRECT_URI': os.environ.get('GOOGLE_DRIVE_REDIRECT_URI', 'http://localhost:8000/drive/callback'),
-}
 
 # ============================================
 # CONFIGURACIÓN DE EMAIL CON GMAIL (SSL)
@@ -288,6 +290,11 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# HSTS - Desactivado temporalmente para pruebas
+# SECURE_HSTS_SECONDS = 31536000
+# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# SECURE_HSTS_PRELOAD = True
 
 CSRF_TRUSTED_ORIGINS = [
     'https://bibliotecaartdisumsa-production.up.railway.app',
@@ -322,7 +329,7 @@ EMAIL_SSL_KEYFILE = None
 # LÍMITES DE SUBIDA DE ARCHIVOS
 # ============================================
 
-# Aumentar límite de subida para PDFs grandes
+# Aumentar límite de subida para PDFs grandes (se subirán a Drive)
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 DATA_UPLOAD_MAX_NUMBER_FILES = 100
 DATA_UPLOAD_MAX_FILE_SIZE = 1024 * 1024 * 500  # 500 MB
