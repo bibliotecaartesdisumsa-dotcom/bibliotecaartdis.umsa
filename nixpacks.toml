@@ -1,0 +1,9 @@
+# https://nixpacks.com/docs/configuration/file
+
+[phases.setup]
+# Los 'aptPkgs' instalarán Ghostscript directamente en el entorno de Railway
+aptPkgs = ["ghostscript"]
+
+# Asegúrate de que tu comando de inicio sea el estándar de Railway
+[start]
+cmd = "gunicorn arteydis.wsgi:application --bind 0.0.0.0:$PORT"
