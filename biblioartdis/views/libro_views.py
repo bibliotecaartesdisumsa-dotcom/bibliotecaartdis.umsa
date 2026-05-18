@@ -7,8 +7,8 @@ from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
 from django.core.files.base import ContentFile
-import fitz 
 from django.core.files.uploadedfile import InMemoryUploadedFile
+import fitz  # PyMuPDF - ¡La mejor librería para comprimir PDFs!
 import logging
 import io
 import tempfile
@@ -18,45 +18,34 @@ from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
 from ..forms import RevistaForm, ColeccionForm, ImagenForm
 
-# Importar PyPDF2 para compresión de PDFs
-try:
-    from PyPDF2 import PdfReader, PdfWriter
-    PDF_COMPRESSION_AVAILABLE = True
-except ImportError:
-    PDF_COMPRESSION_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("PyPDF2 no instalado. La compresión automática de PDF no estará disponible.")
-
 logger = logging.getLogger(__name__)
 
 
 # ============================================
-# FUNCIÓN DE COMPRESIÓN DE PDF
+# FUNCIÓN DE COMPRESIÓN DE PDF CON PyMuPDF
 # ============================================
 def comprimir_pdf(archivo_pdf):
     """
     Comprime un PDF usando PyMuPDF (fitz).
-    Esta función NO necesita Ghostscript en el servidor.
+    Esta función NO necesita Ghostscript ni dependencias externas.
     """
     nombre_original = archivo_pdf.name
     logger.info(f"📄 Iniciando compresión para: {nombre_original}")
 
     try:
-        # 1. Guardamos el archivo subido en un archivo temporal para que PyMuPDF pueda leerlo
+        # 1. Guardamos el archivo subido en un archivo temporal
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_input_file:
             for chunk in archivo_pdf.chunks():
                 tmp_input_file.write(chunk)
             tmp_input_path = tmp_input_file.name
 
-        # 2. ¡El corazón de la magia! Abrimos el PDF con PyMuPDF
+        # 2. Abrimos el PDF con PyMuPDF
         documento_pdf = fitz.open(tmp_input_path)
         
-        # 3. Guardamos el PDF con las opciones de compresión más agresivas.
-        #    `garbage=4` limpia objetos basura. `deflate=True` comprime los flujos de datos.
-        #    Esto puede reducir significativamente el tamaño [citation:4][citation:6].
+        # 3. Guardamos el PDF comprimido
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_output_file:
             tmp_output_path = tmp_output_file.name
-            # Aquí aplicamos la compresión
+            # garbage=4 limpia objetos basura, deflate=True comprime los datos
             documento_pdf.save(tmp_output_path, garbage=4, deflate=True)
             documento_pdf.close()
 
@@ -68,23 +57,25 @@ def comprimir_pdf(archivo_pdf):
         os.unlink(tmp_input_path)
         os.unlink(tmp_output_path)
 
-        # 6. Preparamos el archivo para que Django lo pueda guardar en Cloudinary
+        # 6. Preparamos el archivo para Django/Cloudinary
         compressed_file = io.BytesIO(pdf_comprimido_en_bytes)
         archivo_final = InMemoryUploadedFile(
-            compressed_file,            # archivo
-            'pdf',                      # field_name
-            nombre_original,            # file name
-            'application/pdf',          # content_type
-            len(pdf_comprimido_en_bytes), # size
-            None                        # charset
+            compressed_file,
+            'pdf',
+            nombre_original,
+            'application/pdf',
+            len(pdf_comprimido_en_bytes),
+            None
         )
 
-        logger.info(f"✅ ¡COMPRESIÓN EXITOSA! Tamaño original: {archivo_pdf.size} bytes -> Tamaño final: {len(pdf_comprimido_en_bytes)} bytes")
+        tamaño_original_mb = archivo_pdf.size / (1024 * 1024)
+        tamaño_final_mb = len(pdf_comprimido_en_bytes) / (1024 * 1024)
+        logger.info(f"✅ PDF comprimido: {tamaño_original_mb:.1f}MB → {tamaño_final_mb:.1f}MB")
         return archivo_final
 
     except Exception as e:
-        logger.error(f"❌ Error fatal durante la compresión con PyMuPDF: {str(e)}")
-        return archivo_pdf
+        logger.error(f"❌ Error comprimiendo PDF con PyMuPDF: {str(e)}")
+        return archivo_pdf  # Devolver original si falla
 
 
 # ==================== CRUD Libros ====================
@@ -142,24 +133,23 @@ def agregar_libro(request):
                 if tamaño_mb > 10:
                     logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Comprimiendo...")
                     
-                    if PDF_COMPRESSION_AVAILABLE:
-                        try:
-                            pdf_comprimido = comprimir_pdf(pdf_original)
-                            nuevo_libro.pdf = pdf_comprimido
+                    try:
+                        pdf_comprimido = comprimir_pdf(pdf_original)
+                        nuevo_libro.pdf = pdf_comprimido
+                        
+                        # Verificar tamaño después de comprimir
+                        tamaño_final = nuevo_libro.pdf.size / (1024 * 1024)
+                        logger.info(f"✅ PDF comprimido de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
+                        
+                        if tamaño_final > 10:
+                            messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Puede que no se muestre correctamente en Cloudinary.")
+                        else:
+                            messages.success(request, f"✅ PDF comprimido exitosamente de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
                             
-                            # Verificar tamaño después de comprimir
-                            tamaño_final = nuevo_libro.pdf.size / (1024 * 1024)
-                            logger.info(f"✅ PDF comprimido de {tamaño_mb:.1f}MB a {tamaño_final:.1f}MB")
-                            
-                            if tamaño_final > 10:
-                                messages.warning(request, f"El PDF sigue siendo grande ({tamaño_final:.1f}MB). Puede que no se muestre correctamente en Cloudinary.")
-                        except Exception as e:
-                            logger.error(f"Error en compresión: {e}")
-                            nuevo_libro.pdf = pdf_original
-                            messages.warning(request, "No se pudo comprimir el PDF. Se guardó original.")
-                    else:
+                    except Exception as e:
+                        logger.error(f"Error en compresión: {e}")
                         nuevo_libro.pdf = pdf_original
-                        messages.warning(request, f"El PDF pesa {tamaño_mb:.1f}MB. Instale PyPDF2 para compresión automática.")
+                        messages.warning(request, "No se pudo comprimir el PDF. Se guardó original.")
                 else:
                     nuevo_libro.pdf = pdf_original
                     logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite")
@@ -231,11 +221,17 @@ def editar_libro(request, libro_id):
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
-                if tamaño_mb > 10 and PDF_COMPRESSION_AVAILABLE:
+                if tamaño_mb > 10:
                     logger.info(f"Comprimiendo PDF en edición: {tamaño_mb:.1f}MB")
-                    pdf_comprimido = comprimir_pdf(pdf_original)
-                    libro.pdf = pdf_comprimido
-                    libro.pdf_url = ''
+                    try:
+                        pdf_comprimido = comprimir_pdf(pdf_original)
+                        libro.pdf = pdf_comprimido
+                        libro.pdf_url = ''
+                        logger.info(f"PDF comprimido en edición: {tamaño_mb:.1f}MB → {pdf_comprimido.size / (1024 * 1024):.1f}MB")
+                    except Exception as e:
+                        logger.error(f"Error comprimiendo en edición: {e}")
+                        libro.pdf = pdf_original
+                        libro.pdf_url = ''
                 else:
                     libro.pdf = pdf_original
                     libro.pdf_url = ''
@@ -443,9 +439,6 @@ def listar_imagenes(request):
 
 @admin_required
 def agregar_imagen(request):
-    """
-    Agrega una imagen usando Cloudinary (no FileSystemStorage)
-    """
     categorias = Categoria.objects.all()
     if request.method == 'POST':
         try:
@@ -453,14 +446,12 @@ def agregar_imagen(request):
             descripcion = request.POST.get('descripcion', '')
             autorImg = request.POST.get('autorImg')
             
-            # Crear imagen usando Cloudinary
             nueva_imagen = Imagen(
                 titulo=titulo,
                 descripcion=descripcion,
                 autorImg=autorImg,
             )
             
-            # Cloudinary maneja los archivos automáticamente
             if 'img_portada' in request.FILES:
                 nueva_imagen.img_portada = request.FILES['img_portada']
             if 'pdf' in request.FILES:
@@ -468,7 +459,6 @@ def agregar_imagen(request):
             
             nueva_imagen.save()
             
-            # Agregar categorías
             categorias_seleccionadas = request.POST.getlist('categorias')
             for cat_id in categorias_seleccionadas:
                 try:
@@ -527,10 +517,6 @@ def eliminar_imagen(request, pk):
 
 @login_required
 def editar_marca(request, id_imagen):
-    """
-    Edita la marca de agua de una imagen
-    Nota: Esto usa PIL, puede ser lento en producción
-    """
     from PIL import Image as PILImage
     import io
     from django.core.files.base import ContentFile
