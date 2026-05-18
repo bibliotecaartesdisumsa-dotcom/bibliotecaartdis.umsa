@@ -13,4 +13,5 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8080
 
-CMD ["gunicorn", "arteydis.wsgi:application", "--bind", "0.0.0.0:8080"]
+# ✅ CORREGIDO: Usar array syntax para asegurar que Gunicorn arranca
+CMD ["gunicorn", "arteydis.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120"]
