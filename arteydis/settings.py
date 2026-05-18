@@ -38,9 +38,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Cloudinary
+    # Cloudinary (solo para imágenes pequeñas)
     'cloudinary',
     'cloudinary_storage',
+    
+    # Google Drive para PDFs grandes
+    'googledriveapi',  # ← Agregar esta línea
     
     # Apps propias
     'biblioartdis.apps.BiblioartdisConfig',
@@ -225,7 +228,7 @@ STATICFILES_DIRS = [
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ============================================
-# CONFIGURACIÓN DE CLOUDINARY
+# CONFIGURACIÓN DE CLOUDINARY (SOLO PARA PORTADAS)
 # ============================================
 
 cloudinary.config(
@@ -242,9 +245,28 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
-# Usar Cloudinary Storage
+# Usar Cloudinary Storage SOLO para imágenes
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 MEDIA_URL = '/media/'
+
+# ============================================
+# CONFIGURACIÓN DE GOOGLE DRIVE (PARA PDFs GRANDES)
+# ============================================
+
+# Ruta al archivo de credenciales JSON (lo descargarás de Google Cloud Console)
+# En Railway, usarás la variable de entorno
+GOOGLE_DRIVE_API_JSON_KEY_FILE = os.environ.get('GOOGLE_DRIVE_CREDENTIALS_JSON', 'credentials_drive.json')
+
+# ID de la carpeta donde se guardarán los PDFs (opcional)
+GOOGLE_DRIVE_FOLDER_ID = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
+
+# Configuración de Drive para Django
+DRIVE_STORAGE = {
+    'CLIENT_ID': os.environ.get('GOOGLE_DRIVE_CLIENT_ID'),
+    'CLIENT_SECRET': os.environ.get('GOOGLE_DRIVE_CLIENT_SECRET'),
+    'SCOPE': ['https://www.googleapis.com/auth/drive.file'],
+    'REDIRECT_URI': os.environ.get('GOOGLE_DRIVE_REDIRECT_URI', 'http://localhost:8000/drive/callback'),
+}
 
 # ============================================
 # CONFIGURACIÓN DE EMAIL CON GMAIL (SSL)
@@ -252,11 +274,11 @@ MEDIA_URL = '/media/'
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465  # Puerto SSL
-EMAIL_USE_SSL = True  # Usar SSL en lugar de TLS
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
 EMAIL_USE_TLS = False
-EMAIL_HOST_USER = 'biblioteca.artesdis.umsa@gmail.com'
-EMAIL_HOST_PASSWORD = 'srgjsnwtcbkfuhjt'  # App Password sin espacios
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'biblioteca.artesdis.umsa@gmail.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = 'Biblioteca ARTyDIS <biblioteca.artesdis.umsa@gmail.com>'
 EMAIL_TIMEOUT = 30
 
@@ -295,9 +317,15 @@ IS_MANAGEMENT_COMMAND = 'manage.py' in sys.argv[0] if sys.argv else False
 # CONFIGURACIÓN ADICIONAL PARA EMAIL
 # ============================================
 
-# Forzar el uso del backend de email
 EMAIL_USE_LOCALTIME = True
-
-# Configuración para evitar bloqueos de Gmail
 EMAIL_SSL_CERTFILE = None
 EMAIL_SSL_KEYFILE = None
+
+# ============================================
+# LÍMITES DE SUBIDA DE ARCHIVOS
+# ============================================
+
+# Aumentar límite de subida para PDFs grandes
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+DATA_UPLOAD_MAX_NUMBER_FILES = 100
+DATA_UPLOAD_MAX_FILE_SIZE = 1024 * 1024 * 500  # 500 MB
