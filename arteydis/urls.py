@@ -24,12 +24,13 @@ urlpatterns = [
     path('modificar_usuario/<int:usuario_id>/', views.modificar_usuario, name='modificar_usuario'),
     path('eliminar_usuario/<int:usuario_id>/', views.eliminar_usuario, name='eliminar_usuario'),
     path('lista_usuarios/', views.lista_usuarios, name='lista_usuarios'),
-    path('restablecer_password/', views.restablecer_password, name='restablecer_password'),  # ✅ CORREGIDO
+    path('restablecer_password/', views.restablecer_password, name='restablecer_password'),
     path('cambiar-password/', views.cambiar_password, name='cambiar_password'),
 
     # Gestión de libros
     path('listar_libros/', views.listar_libros, name='listar_libros'),
     path('ver_pdf/<int:libro_id>/', views.ver_pdf, name='ver_pdf'),
+    path('libro/ver_descargar/<int:libro_id>/', views.ver_descargar_libro, name='ver_descargar_libro'),  # ⭐ NUEVA LÍNEA
     path('libro/<int:libro_id>/editar/', views.editar_libro, name='editar_libro'),
     path('libros/<int:libro_id>/eliminar/', views.eliminar_libro, name='eliminar_libro'),
     path('libros/agregar/', views.agregar_libro, name='agregar_libro'),
@@ -85,11 +86,11 @@ urlpatterns = [
     path('actualizar-orden/', views.actualizar_orden_colecciones, name='actualizar_orden_colecciones'),
     path('obtener_novedades/', views.obtener_novedades, name='obtener_novedades'),
 
-    # ==================== MONITOREO DE USUARIOS ACTIVOS ====================
+    # Monitoreo de usuarios activos
     path('usuarios-activos/', views.usuarios_activos, name='usuarios_activos'),
     path('ver-historial/<int:usuario_id>/', views.ver_historial_usuario, name='ver_historial_usuario'),
     
-    # ==================== CHAT CON IA ====================
+    # Chat con IA
     path('chat-gemini/', views.chat_con_gemini, name='chat_gemini'),
 ]
 
