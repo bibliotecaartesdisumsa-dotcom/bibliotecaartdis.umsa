@@ -11,7 +11,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', auth_views.home, name='home'),
     path('accounts/login/', auth_views.home, name='login'),
-    path('inicio/', auth_views.inicio, name='inicio'),
+    path('inicio/', auth_views.home, name='inicio'),  # Cambiado: home en lugar de inicio
     path('principal/', auth_views.principal, name='principal'),
     path('accounts/logout/', auth_views.logout_view, name='logout'),
     
@@ -30,8 +30,8 @@ urlpatterns = [
 
     # Gestión de libros (libro_views)
     path('listar_libros/', libro_views.listar_libros, name='listar_libros'),
-    path('ver_pdf/<int:libro_id>/', libro_views.ver_pdf, name='ver_pdf'),
-    path('libro/ver_descargar/<int:libro_id>/', libro_views.ver_descargar_libro, name='ver_descargar_libro'),  # <-- NUEVA
+    path('ver_pdf/<int:libro_id>/', libro_views.ver_descargar_libro, name='ver_pdf'),  # Redirige a la nueva vista
+    path('libro/ver_descargar/<int:libro_id>/', libro_views.ver_descargar_libro, name='ver_descargar_libro'),
     path('libro/<int:libro_id>/editar/', libro_views.editar_libro, name='editar_libro'),
     path('libros/<int:libro_id>/eliminar/', libro_views.eliminar_libro, name='eliminar_libro'),
     path('libros/agregar/', libro_views.agregar_libro, name='agregar_libro'),
@@ -42,9 +42,9 @@ urlpatterns = [
     path('eliminar_autorizacion/<int:libro_id>/', libro_views.eliminar_autorizacion, name='eliminar_autorizacion'),
     path('libro/<int:libro_id>/cambiar_estado_descarga/', libro_views.cambiar_estado_descarga, name='cambiar_estado_descarga'),
 
-    # Gestión de sugerencias (usuario_views o admin_views según corresponda)
+    # Gestión de sugerencias (usuario_views o admin_views)
     path('sugerencias/', usuario_views.listar_sugerencias, name='listar_sugerencias'),
-    path('sugerencias/descartar/<int:sugerencia_id>/', usuario_views.descartar_sugerencia, name='descartar_sugerencia'),
+    path('sugerencias/descartar/<int:sugerencia_id>//', usuario_views.descartar_sugerencia, name='descartar_sugerencia'),
     path('sugerencias/aprobar/<int:sugerencia_id>/', usuario_views.aprobar_sugerencia, name='aprobar_sugerencia'), 
     path('sugerir_libro/', usuario_views.sugerir_libro, name='sugerir_libro'),
     path('listar_sugerencias_usuario/', usuario_views.listar_sugerencias_usuario, name='listar_sugerencias_usuario'),
@@ -79,17 +79,17 @@ urlpatterns = [
     path('eliminar/<int:pk>/', admin_views.eliminar_imagen, name='eliminar_imagen'),
     path('ver_imagen/<int:id>/', admin_views.ver_imagen, name='ver_imagen'),
     
-    # Catálogo y otras funcionalidades
+    # Catálogo y otras funcionalidades (auth_views)
     path('catalogo/', auth_views.catalogo, name='catalogo'),
     path('buscar_libros/', auth_views.buscar_libros, name='buscar_libros'),
-    path('chatbot/', auth_views.chatbot_view, name='chatbot_view'),
+    path('chatbot/', auth_views.chatbot, name='chatbot'),  # Cambiado: chatbot en lugar de chatbot_view
     path('obtener_novedades/', auth_views.obtener_novedades, name='obtener_novedades'),
 
-    # Monitoreo de usuarios activos (usuario_views o admin_views)
+    # Monitoreo de usuarios activos (usuario_views)
     path('usuarios-activos/', usuario_views.usuarios_activos, name='usuarios_activos'),
     path('ver-historial/<int:usuario_id>/', usuario_views.ver_historial_usuario, name='ver_historial_usuario'),
     
-    # Chat con IA (auth_views o donde lo tengas)
+    # Chat con IA (auth_views)
     path('chat-gemini/', auth_views.chat_con_gemini, name='chat_gemini'),
 ]
 
