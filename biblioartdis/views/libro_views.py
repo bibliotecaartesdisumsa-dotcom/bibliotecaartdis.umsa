@@ -2,7 +2,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError
@@ -12,6 +12,7 @@ import logging
 import io
 import tempfile
 import os
+import re
 
 from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
@@ -282,14 +283,14 @@ def ver_descargar_libro(request, libro_id):
     """
     libro = get_object_or_404(Libro, id_libro=libro_id)
     
-    # Verificar si es bibliotecario
-    es_bibliotecario = request.user.is_staff or request.user.groups.filter(name='Bibliotecario').exists()
+    # Verificar si es administrador (tiene acceso total)
+    es_admin = hasattr(request.user, 'usuario') and request.user.usuario.tipo_usuario == 'Administrador'
     
     # Modo embebido (para el visor del sistema)
     es_modo_embed = request.GET.get('embed') == 'true'
     
     # Verificar permisos
-    if not libro.descarga_autorizada and not es_bibliotecario:
+    if not libro.descarga_autorizada and not es_admin:
         if es_modo_embed:
             # Mensaje dentro del iframe
             return HttpResponse(
@@ -332,6 +333,7 @@ def ver_descargar_libro(request, libro_id):
                 content_type='text/html'
             )
         else:
+            # Página de acceso restringido
             return render(request, 'acceso_restringido.html', {
                 'libro': libro,
                 'mensaje': 'Este libro tiene restringida su descarga. Solo puedes leerlo dentro del sistema.'
@@ -340,35 +342,32 @@ def ver_descargar_libro(request, libro_id):
     logger.info(f"Acceso permitido a '{libro.titulo}' para {request.user.username}")
     
     # Determinar la URL del archivo
-    archivo_url = None
-    if libro.google_drive_url:
-        archivo_url = libro.google_drive_url
-        if es_modo_embed:
-            # Extraer ID para embebido
-            file_id = None
-            if 'file/d/' in archivo_url:
-                file_id = archivo_url.split('/file/d/')[1].split('/')[0]
-            elif 'id=' in archivo_url:
-                file_id = archivo_url.split('id=')[1].split('&')[0]
-            if file_id:
-                archivo_url = f'https://drive.google.com/file/d/{file_id}/preview'
-    elif libro.pdf and libro.pdf.name:
-        archivo_url = libro.pdf.url
-    elif libro.pdf_url:
-        archivo_url = libro.pdf_url
+    archivo_url = libro.get_pdf_display_url()
     
     if not archivo_url:
         return render(request, 'error_recurso.html', {'mensaje': 'No hay archivo disponible.'}, status=404)
     
-    # Modo embebido
+    # Modo embebido (para visor en el sistema)
     if es_modo_embed:
+        # Verificar si es URL de Google Drive para formatear correctamente
+        if 'drive.google.com' in archivo_url:
+            # Extraer ID para embebido
+            file_id = None
+            if '/file/d/' in archivo_url:
+                file_id = archivo_url.split('/file/d/')[1].split('/')[0]
+            elif 'id=' in archivo_url:
+                file_id = archivo_url.split('id=')[1].split('&')[0]
+            
+            if file_id:
+                archivo_url = f'https://drive.google.com/file/d/{file_id}/preview'
+        
         return render(request, 'ver_libro_embed.html', {
             'libro': libro,
             'archivo_url': archivo_url,
-            'permitir_descarga': libro.descarga_autorizada or es_bibliotecario
+            'permitir_descarga': libro.descarga_autorizada or es_admin
         })
     
-    # Modo normal: redirigir
+    # Modo normal: redirigir al archivo
     return redirect(archivo_url)
 
 
@@ -638,6 +637,8 @@ def eliminar_imagen(request, pk):
 def editar_marca(request, id_imagen):
     """Aplica marca de agua a una imagen"""
     from PIL import Image as PILImage
+    import io
+    from django.core.files.base import ContentFile
     
     imagen = get_object_or_404(Imagen, pk=id_imagen)
     
@@ -648,14 +649,16 @@ def editar_marca(request, id_imagen):
             
             if 'marca_agua' in request.FILES:
                 marca_agua = PILImage.open(request.FILES['marca_agua'])
-                img = PILImage.open(imagen.img_portada)
+                img_portada = PILImage.open(imagen.img_portada)
                 
-                marca_agua.putalpha(int(255 * 0.5))
-                img.paste(marca_agua, (0, 0), marca_agua)
+                transparencia = 0.5
+                marca_agua.putalpha(int(255 * transparencia))
+                img_portada.paste(marca_agua, (0, 0), marca_agua)
                 
                 img_io = io.BytesIO()
-                img.save(img_io, format='PNG')
-                imagen.img_portada.save('imagen_con_marca.png', ContentFile(img_io.getvalue()))
+                img_portada.save(img_io, format='PNG')
+                img_file = ContentFile(img_io.getvalue(), 'imagen_con_marca_agua.png')
+                imagen.img_portada = img_file
             
             imagen.save()
             messages.success(request, 'Marca de agua aplicada')
