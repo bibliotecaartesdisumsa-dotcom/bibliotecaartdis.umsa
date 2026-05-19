@@ -513,7 +513,7 @@
                             </div>
                         {% endif %}
                     </td>
-                    <td>
+                    <td style="min-width: 200px;">
                         <strong>{{ libro.titulo|truncatechars:50 }}</strong>
                         {% if libro.descarga_autorizada %}
                             <span class="status-badge status-authorized">
@@ -581,7 +581,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    <!-- Columna de Acciones (solo bibliotecario) -->
+                    <!-- Columna de Acciones -->
                     <td>
                         <div class="action-buttons">
                             <a href="{% url 'editar_libro' libro.id_libro %}" class="btn-action btn-edit" title="Editar">
@@ -593,20 +593,19 @@
                                     <i class="fas fa-trash-alt"></i> Eliminar
                                 </button>
                             </form>
-                            {% if libro.pdf or libro.pdf_url or libro.google_drive_url %}
-                                <form method="post" action="{% url 'cambiar_estado_descarga' libro.id_libro %}" class="d-inline">
-                                    {% csrf_token %}
-                                    {% if libro.descarga_autorizada %}
-                                        <button type="submit" class="btn-action btn-restrict" title="Restringir descarga (solo lectura)">
-                                            <i class="fas fa-lock"></i> Restringir
-                                        </button>
-                                    {% else %}
-                                        <button type="submit" class="btn-action btn-authorize" title="Autorizar descarga">
-                                            <i class="fas fa-unlock-alt"></i> Autorizar
-                                        </button>
-                                    {% endif %}
-                                </form>
-                            {% endif %}
+                            <!-- Botón Restringir/Autorizar - SIEMPRE VISIBLE -->
+                            <form method="post" action="{% url 'cambiar_estado_descarga' libro.id_libro %}" class="d-inline">
+                                {% csrf_token %}
+                                {% if libro.descarga_autorizada %}
+                                    <button type="submit" class="btn-action btn-restrict" title="Restringir descarga (solo lectura)">
+                                        <i class="fas fa-lock"></i> Restringir
+                                    </button>
+                                {% else %}
+                                    <button type="submit" class="btn-action btn-authorize" title="Autorizar descarga">
+                                        <i class="fas fa-unlock-alt"></i> Autorizar
+                                    </button>
+                                {% endif %}
+                            </form>
                         </div>
                     </td>
                 </tr>
