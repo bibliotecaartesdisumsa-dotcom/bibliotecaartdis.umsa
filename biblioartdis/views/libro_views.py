@@ -276,88 +276,42 @@ def cambiar_estado_descarga(request, libro_id):
 
 @login_required
 def ver_descargar_libro(request, libro_id):
-    """
-    Vista protegida para ver/descargar un libro
-    - Si descarga_autorizada=True → permite descargar
-    - Si descarga_autorizada=False → solo lectura en el sistema
-    """
     libro = get_object_or_404(Libro, id_libro=libro_id)
     
-    # Verificar si es administrador (tiene acceso total)
     es_admin = hasattr(request.user, 'usuario') and request.user.usuario.tipo_usuario == 'Administrador'
-    
-    # Modo embebido (para el visor del sistema)
     es_modo_embed = request.GET.get('embed') == 'true'
     
     # Verificar permisos
     if not libro.descarga_autorizada and not es_admin:
         if es_modo_embed:
-            # Mensaje dentro del iframe
-            return HttpResponse(
-                """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            height: 100vh;
-                            margin: 0;
-                            background: #f5f5f5;
-                        }
-                        .mensaje {
-                            text-align: center;
-                            padding: 40px;
-                            background: white;
-                            border-radius: 10px;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        }
-                        .mensaje i { font-size: 48px; color: #F59E0B; }
-                        .mensaje h3 { color: #333; margin: 20px 0; }
-                        .mensaje p { color: #666; }
-                    </style>
-                </head>
-                <body>
-                    <div class="mensaje">
-                        <i class="fas fa-lock"></i>
-                        <h3>🔒 Acceso Restringido</h3>
-                        <p>Este libro solo está disponible para lectura dentro del sistema.</p>
-                        <p>Contacta al bibliotecario si necesitas descargarlo.</p>
-                    </div>
-                </body>
-                </html>
-                """,
-                content_type='text/html'
-            )
+            # Mostrar visor embebido con mensaje de restricción
+            return render(request, 'ver_libro_embed.html', {
+                'libro': libro,
+                'archivo_url': None,
+                'permitir_descarga': False,
+                'mensaje': 'Este libro solo está disponible para lectura dentro del sistema.'
+            })
         else:
-            # Página de acceso restringido
             return render(request, 'acceso_restringido.html', {
                 'libro': libro,
-                'mensaje': 'Este libro tiene restringida su descarga. Solo puedes leerlo dentro del sistema.'
+                'mensaje': 'Este libro tiene restringida su descarga.'
             })
     
-    logger.info(f"Acceso permitido a '{libro.titulo}' para {request.user.username}")
-    
-    # Determinar la URL del archivo
+    # Obtener URL del archivo
     archivo_url = libro.get_pdf_display_url()
     
     if not archivo_url:
         return render(request, 'error_recurso.html', {'mensaje': 'No hay archivo disponible.'}, status=404)
     
-    # Modo embebido (para visor en el sistema)
+    # Modo embebido - mostrar visor
     if es_modo_embed:
         # Verificar si es URL de Google Drive para formatear correctamente
         if 'drive.google.com' in archivo_url:
-            # Extraer ID para embebido
             file_id = None
             if '/file/d/' in archivo_url:
                 file_id = archivo_url.split('/file/d/')[1].split('/')[0]
             elif 'id=' in archivo_url:
                 file_id = archivo_url.split('id=')[1].split('&')[0]
-            
             if file_id:
                 archivo_url = f'https://drive.google.com/file/d/{file_id}/preview'
         
@@ -367,7 +321,7 @@ def ver_descargar_libro(request, libro_id):
             'permitir_descarga': libro.descarga_autorizada or es_admin
         })
     
-    # Modo normal: redirigir al archivo
+    # Modo normal - redirigir al archivo
     return redirect(archivo_url)
 
 

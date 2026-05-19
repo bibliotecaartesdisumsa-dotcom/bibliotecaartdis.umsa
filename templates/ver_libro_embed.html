@@ -3,490 +3,56 @@
 
 {% block content %}
 <style>
-    :root {
-        --primary-dark: #0F2B3D;
-        --primary: #1A3A4F;
-        --accent: #F59E0B;
-        --accent-hover: #FBBF24;
-        --success: #10B981;
-        --info: #3B82F6;
-        --warning: #F59E0B;
-        --danger: #EF4444;
-        --bg-light: #F8FAFC;
-        --text-primary: #1F2937;
-        --text-secondary: #6B7280;
-        --border-light: #E5E7EB;
-    }
-
-    .pdf-reader-container {
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
+    .pdf-container {
+        height: calc(100vh - 120px);
         background: #1a1a2e;
+        padding: 0;
+        margin: -1.5rem -1.5rem 0 -1.5rem;
     }
-
-    /* Header del visor */
-    .pdf-header {
-        background: var(--primary-dark);
-        color: white;
-        padding: 1rem 1.5rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 1rem;
-        border-bottom: 2px solid var(--accent);
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    }
-
-    .pdf-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .pdf-title i {
-        font-size: 1.5rem;
-        color: var(--accent);
-    }
-
-    .pdf-title h3 {
-        margin: 0;
-        font-size: 1.2rem;
-        font-weight: 600;
-    }
-
-    .pdf-title .badge {
-        background: rgba(245, 158, 11, 0.2);
-        color: var(--accent);
-        padding: 0.2rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        margin-left: 10px;
-    }
-
-    .pdf-actions {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .btn-pdf {
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.2s ease;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        border: none;
-        cursor: pointer;
-    }
-
-    .btn-download {
-        background: rgba(16, 185, 129, 0.2);
-        color: var(--success);
-        border: 1px solid var(--success);
-    }
-
-    .btn-download:hover {
-        background: var(--success);
-        color: white;
-        transform: translateY(-2px);
-    }
-
-    .btn-back {
-        background: rgba(107, 114, 128, 0.2);
-        color: white;
-        border: 1px solid #6B7280;
-    }
-
-    .btn-back:hover {
-        background: #6B7280;
-        color: white;
-        transform: translateY(-2px);
-    }
-
-    .btn-fullscreen {
-        background: rgba(59, 130, 246, 0.2);
-        color: var(--info);
-        border: 1px solid var(--info);
-    }
-
-    .btn-fullscreen:hover {
-        background: var(--info);
-        color: white;
-        transform: translateY(-2px);
-    }
-
-    /* Info del libro */
-    .pdf-info {
-        background: #2a2a3e;
-        padding: 0.5rem 1.5rem;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1.5rem;
-        font-size: 0.8rem;
-        border-bottom: 1px solid #3a3a4e;
-    }
-
-    .pdf-info-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: #c4c4d4;
-    }
-
-    .pdf-info-item i {
-        color: var(--accent);
-        font-size: 0.8rem;
-    }
-
-    .pdf-info-item strong {
-        color: white;
-        font-weight: 600;
-    }
-
-    /* Contenedor del PDF */
-    .pdf-viewer {
-        flex: 1;
-        background: #0a0a14;
-        position: relative;
-    }
-
     .pdf-iframe {
         width: 100%;
         height: 100%;
         border: none;
-        background: white;
     }
-
-    /* Mensaje de carga */
-    .loading-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: #0a0a14;
+    .pdf-header {
+        background: var(--primary-dark);
+        padding: 1rem 1.5rem;
         display: flex;
-        justify-content: center;
+        justify-content: space-between;
         align-items: center;
-        z-index: 10;
-        transition: opacity 0.3s ease;
     }
-
-    .loading-spinner {
-        text-align: center;
+    .pdf-header h4 {
         color: white;
+        margin: 0;
     }
-
-    .loading-spinner i {
-        font-size: 3rem;
-        color: var(--accent);
-        animation: spin 1s linear infinite;
-    }
-
-    .loading-spinner p {
-        margin-top: 1rem;
-        font-size: 0.9rem;
-        color: #c4c4d4;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    /* Mensaje de error */
-    .error-message {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100%;
-        background: #f5f5f5;
-    }
-
-    .error-card {
-        text-align: center;
-        padding: 2rem;
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        max-width: 400px;
-        margin: 20px;
-    }
-
-    .error-card i {
-        font-size: 4rem;
-        color: var(--warning);
-        margin-bottom: 1rem;
-    }
-
-    .error-card h4 {
-        color: var(--text-primary);
-        margin-bottom: 1rem;
-    }
-
-    .error-card p {
-        color: var(--text-secondary);
-        margin-bottom: 1.5rem;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-        .pdf-header {
-            padding: 0.8rem 1rem;
-        }
-        
-        .pdf-title h3 {
-            font-size: 0.9rem;
-        }
-        
-        .btn-pdf {
-            padding: 0.4rem 0.8rem;
-            font-size: 0.75rem;
-        }
-        
-        .pdf-info {
-            padding: 0.4rem 1rem;
-            gap: 1rem;
-        }
-        
-        .pdf-info-item {
-            font-size: 0.7rem;
-        }
-    }
-
-    /* Modo pantalla completa */
-    .pdf-viewer:fullscreen {
-        background: #0a0a14;
-    }
-    
-    .pdf-viewer:-webkit-full-screen {
-        background: #0a0a14;
+    .btn-back {
+        background: var(--accent);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        text-decoration: none;
     }
 </style>
 
-<div class="pdf-reader-container">
-    <!-- Header con información del libro -->
+<div class="pdf-container">
     <div class="pdf-header">
-        <div class="pdf-title">
-            <i class="fas fa-book-open"></i>
-            <div>
-                <h3>{{ libro.titulo }}</h3>
-                {% if libro.edicion %}
-                    <small style="color: #c4c4d4;">{{ libro.edicion }}</small>
-                {% endif %}
-            </div>
-            {% if not permitir_descarga %}
-                <span class="badge">
-                    <i class="fas fa-eye"></i> Solo lectura
-                </span>
-            {% endif %}
-        </div>
-        <div class="pdf-actions">
-            {% if permitir_descarga %}
-                <a href="{% url 'ver_descargar_libro' libro.id_libro %}" 
-                   class="btn-pdf btn-download" 
-                   download>
-                    <i class="fas fa-download"></i> Descargar PDF
-                </a>
-            {% endif %}
-            <button class="btn-pdf btn-fullscreen" onclick="toggleFullscreen()">
-                <i class="fas fa-expand"></i> Pantalla completa
-            </button>
-            <a href="javascript:history.back()" class="btn-pdf btn-back">
-                <i class="fas fa-arrow-left"></i> Volver
-            </a>
-        </div>
+        <h4><i class="fas fa-book-open"></i> {{ libro.titulo }}</h4>
+        <a href="javascript:history.back()" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
     </div>
-
-    <!-- Información adicional del libro -->
-    <div class="pdf-info">
-        <div class="pdf-info-item">
-            <i class="fas fa-tag"></i>
-            <span><strong>Tipo:</strong> {{ libro.tipo|default:"No especificado" }}</span>
-        </div>
-        <div class="pdf-info-item">
-            <i class="fas fa-user"></i>
-            <span>
-                <strong>Autor(es):</strong>
-                {% for autor in libro.autores.all %}
-                    {{ autor.nombre }}{% if not forloop.last %}, {% endif %}
-                {% empty %}
-                    No especificado
-                {% endfor %}
-            </span>
-        </div>
-        <div class="pdf-info-item">
-            <i class="fas fa-calendar"></i>
-            <span><strong>Fecha:</strong> {{ libro.fecha_publicacion|date:"d/m/Y"|default:"No especificada" }}</span>
-        </div>
-        {% if libro.categoria or libro.categorias.all %}
-        <div class="pdf-info-item">
-            <i class="fas fa-layer-group"></i>
-            <span>
-                <strong>Categorías:</strong>
-                {% if libro.categoria %}{{ libro.categoria }}{% endif %}
-                {% for categoria in libro.categorias.all %}
-                    {% if forloop.first and libro.categoria %}, {% endif %}
-                    {{ categoria.nom_cat }}{% if not forloop.last %}, {% endif %}
-                {% endfor %}
-            </span>
-        </div>
-        {% endif %}
-        {% if libro.descripcion %}
-        <div class="pdf-info-item">
-            <i class="fas fa-align-left"></i>
-            <span><strong>Descripción:</strong> {{ libro.descripcion|truncatechars:100 }}</span>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Visor del PDF -->
-    <div class="pdf-viewer" id="pdfViewer">
-        <div class="loading-overlay" id="loadingOverlay">
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-pulse"></i>
-                <p>Cargando documento... <span id="loadingMessage"></span></p>
+    
+    {% if archivo_url %}
+        <iframe class="pdf-iframe" src="{{ archivo_url }}" allow="fullscreen"></iframe>
+    {% else %}
+        <div style="display: flex; justify-content: center; align-items: center; height: 80%;">
+            <div class="text-center text-white">
+                <i class="fas fa-lock fa-4x mb-3"></i>
+                <h3>Acceso Restringido</h3>
+                <p>{{ mensaje|default:"Este documento no está disponible para lectura en línea." }}</p>
             </div>
         </div>
-        <iframe id="pdfFrame" 
-                class="pdf-iframe" 
-                src="{{ archivo_url }}"
-                title="Visor de PDF - {{ libro.titulo }}"
-                allow="autoplay; fullscreen">
-        </iframe>
-    </div>
+    {% endif %}
 </div>
-
-<script>
-    // Variables
-    const pdfFrame = document.getElementById('pdfFrame');
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    const loadingMessage = document.getElementById('loadingMessage');
-    let loadingTimeout;
-    
-    // Mensajes de carga aleatorios
-    const loadingMessages = [
-        "Preparando el documento...",
-        "Cargando páginas...",
-        "Optimizando visualización...",
-        "Casi listo...",
-        "Abriendo el libro..."
-    ];
-    
-    let messageIndex = 0;
-    
-    // Mostrar mensajes de carga rotativos
-    function rotateLoadingMessage() {
-        if (loadingOverlay && loadingOverlay.style.display !== 'none') {
-            loadingMessage.textContent = loadingMessages[messageIndex % loadingMessages.length];
-            messageIndex++;
-            setTimeout(rotateLoadingMessage, 2000);
-        }
-    }
-    
-    // Ocultar loading cuando el iframe cargue
-    function hideLoading() {
-        if (loadingOverlay) {
-            loadingOverlay.style.opacity = '0';
-            setTimeout(() => {
-                loadingOverlay.style.display = 'none';
-            }, 300);
-        }
-        if (loadingTimeout) {
-            clearTimeout(loadingTimeout);
-        }
-    }
-    
-    // Mostrar loading mientras carga
-    function showLoading() {
-        if (loadingOverlay) {
-            loadingOverlay.style.display = 'flex';
-            loadingOverlay.style.opacity = '1';
-        }
-        rotateLoadingMessage();
-        
-        // Timeout de seguridad: ocultar después de 10 segundos aunque no cargue
-        loadingTimeout = setTimeout(() => {
-            hideLoading();
-        }, 10000);
-    }
-    
-    // Evento cuando el iframe termina de cargar
-    pdfFrame.addEventListener('load', function() {
-        hideLoading();
-    });
-    
-    // Evento si hay error en el iframe
-    pdfFrame.addEventListener('error', function() {
-        hideLoading();
-        showErrorMessage();
-    });
-    
-    // Mostrar mensaje de error si no se puede cargar el PDF
-    function showErrorMessage() {
-        const pdfViewer = document.getElementById('pdfViewer');
-        if (pdfViewer) {
-            pdfViewer.innerHTML = `
-                <div class="error-message">
-                    <div class="error-card">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h4>No se pudo cargar el documento</h4>
-                        <p>El archivo PDF no está disponible en este momento o requiere permisos especiales.</p>
-                        <button onclick="location.reload()" class="btn-pdf" style="background: var(--primary); color: white;">
-                            <i class="fas fa-sync-alt"></i> Intentar de nuevo
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-    }
-    
-    // Función para pantalla completa
-    function toggleFullscreen() {
-        const viewer = document.getElementById('pdfViewer');
-        if (!document.fullscreenElement) {
-            viewer.requestFullscreen().catch(err => {
-                console.error(`Error al entrar en pantalla completa: ${err.message}`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
-    }
-    
-    // Escuchar cambios en pantalla completa para cambiar ícono
-    document.addEventListener('fullscreenchange', function() {
-        const btnFullscreen = document.querySelector('.btn-fullscreen');
-        if (btnFullscreen) {
-            if (document.fullscreenElement) {
-                btnFullscreen.innerHTML = '<i class="fas fa-compress"></i> Salir pantalla completa';
-            } else {
-                btnFullscreen.innerHTML = '<i class="fas fa-expand"></i> Pantalla completa';
-            }
-        }
-    });
-    
-    // Iniciar loading
-    showLoading();
-    
-    // Tecla ESC para salir de pantalla completa
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && document.fullscreenElement) {
-            document.exitFullscreen();
-        }
-    });
-    
-    // Si el iframe se carga rápido, ocultar loading
-    setTimeout(() => {
-        if (pdfFrame.contentDocument && pdfFrame.contentDocument.readyState === 'complete') {
-            hideLoading();
-        }
-    }, 500);
-</script>
-
 {% endblock %}
