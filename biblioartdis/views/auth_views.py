@@ -50,32 +50,35 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
     Retorna (user, created, error_message)
     """
     try:
-        # Buscar si el usuario ya existe
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'username': None,
-                'password': 'unusable_password_temp',  # ✅ TEMPORAL (se reemplazará)
-            }
-        )
+        # Generar username temporal único basado en el email
+        username_base = re.sub(r'[^a-zA-Z0-9_]', '', email.split('@')[0])
+        if not username_base:
+            username_base = f"user_{email.split('@')[0]}"
         
-        if created:
-            # Generar username a partir del email
-            username_base = re.sub(r'[^a-zA-Z0-9_]', '', email.split('@')[0])
-            if not username_base:
-                username_base = f"user_{email.split('@')[0]}"
-            
-            final_username = username_base
-            counter = 1
-            while User.objects.filter(username=final_username).exists():
-                final_username = f"{username_base}{counter}"
-                counter += 1
-            
-            user.username = final_username
-            user.set_unusable_password()  # ✅ Deshabilitar contraseña normal
+        final_username = username_base
+        counter = 1
+        while User.objects.filter(username=final_username).exists():
+            final_username = f"{username_base}{counter}"
+            counter += 1
+        
+        # Buscar si el usuario ya existe por email
+        user = User.objects.filter(email=email).first()
+        created = False
+        
+        if not user:
+            # Crear usuario con username válido
+            user = User.objects.create_user(
+                username=final_username,
+                email=email,
+                password='unusable_password_temp'
+            )
+            user.set_unusable_password()
             user.first_name = email.split('@')[0].capitalize()
             user.save()
-            logger.info(f"✅ Usuario creado: {email}")
+            created = True
+            logger.info(f"✅ Usuario creado: {email} (Username: {final_username})")
+        else:
+            logger.info(f"ℹ️ Usuario ya existía: {email}")
         
         # Verificar si tiene perfil de Usuario
         from ..models import Usuario
@@ -105,7 +108,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
         if perfil_created:
             logger.info(f"✅ Perfil creado para: {email} (Tipo: {perfil.tipo_usuario})")
         else:
-            # ✅ NO cambiar el tipo_usuario si ya existe
+            # NO cambiar el tipo_usuario si ya existe
             actualizado = False
             if not perfil.nombres or perfil.nombres == '':
                 perfil.nombres = email.split('@')[0].capitalize()
