@@ -45,6 +45,7 @@ def enviar_codigo_async(user):
 def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
     """
     Crea un usuario automáticamente si no existe.
+    Usa get_or_create para evitar duplicados.
     RESPETA el rol existente - NO lo sobrescribe.
     Retorna (user, created, error_message)
     """
@@ -54,7 +55,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
             email=email,
             defaults={
                 'username': None,
-                'password': None,
+                'password': 'unusable_password_temp',  # ✅ TEMPORAL (se reemplazará)
             }
         )
         
@@ -71,7 +72,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
                 counter += 1
             
             user.username = final_username
-            user.set_unusable_password()
+            user.set_unusable_password()  # ✅ Deshabilitar contraseña normal
             user.first_name = email.split('@')[0].capitalize()
             user.save()
             logger.info(f"✅ Usuario creado: {email}")
@@ -105,9 +106,7 @@ def crear_usuario_si_no_existe(email, correo_especial='vc3070934@gmail.com'):
             logger.info(f"✅ Perfil creado para: {email} (Tipo: {perfil.tipo_usuario})")
         else:
             # ✅ NO cambiar el tipo_usuario si ya existe
-            # Solo actualizar campos vacíos
             actualizado = False
-            
             if not perfil.nombres or perfil.nombres == '':
                 perfil.nombres = email.split('@')[0].capitalize()
                 actualizado = True
