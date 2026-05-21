@@ -12,6 +12,7 @@ import logging
 import io
 import tempfile
 import os
+import threading
 
 from ..decorators import admin_required
 from ..models import Libro, Autor, Categoria, Revista, Coleccion, Imagen
@@ -19,6 +20,30 @@ from ..forms import RevistaForm, ColeccionForm, ImagenForm
 from ..drive_utils import subir_pdf_a_drive
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================
+# FUNCIÓN DE SUBIDA ASÍNCRONA A GOOGLE DRIVE
+# ============================================
+def subir_pdf_a_drive_async(pdf_original, nombre_archivo, libro_id):
+    """Sube un PDF a Google Drive en segundo plano"""
+    try:
+        from ..models import Libro
+        
+        # Subir a Drive
+        drive_url = subir_pdf_a_drive(pdf_original, nombre_archivo)
+        
+        if drive_url:
+            # Actualizar el libro con la URL de Drive
+            libro = Libro.objects.get(id_libro=libro_id)
+            libro.google_drive_url = drive_url
+            libro.pdf = None
+            libro.save()
+            logger.info(f"✅ PDF subido asíncronamente a Google Drive: {drive_url} (Libro ID: {libro_id})")
+        else:
+            logger.error(f"❌ Falló subida asíncrona a Drive para libro {libro_id}")
+    except Exception as e:
+        logger.error(f"❌ Error en subida asíncrona a Drive: {str(e)}")
 
 
 # ==================== CRUD Libros ====================
@@ -56,58 +81,60 @@ def agregar_libro(request):
             google_drive_url = request.POST.get('google_drive_url')
             categorias_seleccionadas = request.POST.getlist('categorias')
             
+            # Crear el libro (por defecto descarga restringida)
             nuevo_libro = Libro(
-                titulo=titulo, edicion=edicion, tipo=tipo, categoria=categoria,
-                descripcion=descripcion, pdf_url=pdf_url,
-                google_drive_url=google_drive_url
+                titulo=titulo, 
+                edicion=edicion, 
+                tipo=tipo, 
+                categoria=categoria,
+                descripcion=descripcion, 
+                pdf_url=pdf_url,
+                google_drive_url=google_drive_url,
+                descarga_autorizada=False
             )
             
-            # Portada
+            # Manejo de portada
             if 'portada' in request.FILES:
                 nuevo_libro.img_portada = request.FILES['portada']
                 logger.info(f"Portada agregada: {request.FILES['portada'].name}")
             
             # ============================================
-            # MANEJO DE PDF - SUBIDA AUTOMÁTICA A DRIVE
+            # MANEJO DE PDF - SUBIDA ASÍNCRONA A DRIVE
             # ============================================
+            pdf_para_subir = None
             if 'pdf' in request.FILES:
                 pdf_original = request.FILES['pdf']
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
-                # Para PDFs grandes (> 10 MB), subir a Google Drive automáticamente
                 if tamaño_mb > 10:
-                    logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Subiendo a Google Drive...")
-                    
-                    try:
-                        # Subir a Drive automáticamente
-                        drive_url = subir_pdf_a_drive(pdf_original, titulo)
-                        
-                        if drive_url:
-                            nuevo_libro.google_drive_url = drive_url
-                            nuevo_libro.pdf = None  # No guardar en Cloudinary
-                            logger.info(f"✅ PDF subido a Google Drive: {drive_url}")
-                            messages.success(request, f"✅ PDF subido automáticamente a Google Drive")
-                        else:
-                            # Si falla Drive, guardar en Cloudinary
-                            logger.warning("Falló subida a Drive, guardando en Cloudinary...")
-                            nuevo_libro.pdf = pdf_original
-                            messages.warning(request, "No se pudo subir a Google Drive. Se guardó en Cloudinary.")
-                            
-                    except Exception as e:
-                        logger.error(f"Error subiendo a Drive: {e}")
-                        nuevo_libro.pdf = pdf_original
-                        messages.warning(request, "Error al subir a Google Drive. Se guardó en Cloudinary.")
+                    logger.info(f"📄 PDF grande detectado: {tamaño_mb:.1f}MB. Se subirá a Google Drive en segundo plano...")
+                    # Guardar el PDF original para subirlo después
+                    pdf_para_subir = pdf_original
+                    messages.info(request, "✅ El PDF se está subiendo a Google Drive en segundo plano. La URL aparecerá en breve.")
                 else:
                     # PDFs pequeños a Cloudinary
                     nuevo_libro.pdf = pdf_original
                     logger.info(f"📄 PDF de {tamaño_mb:.1f}MB dentro del límite de Cloudinary")
             
+            # Guardar el libro primero
+            nuevo_libro.save()
+            libro_id = nuevo_libro.id_libro
+            
+            # Si hay PDF grande, subirlo en segundo plano
+            if pdf_para_subir:
+                thread = threading.Thread(
+                    target=subir_pdf_a_drive_async,
+                    args=(pdf_para_subir, titulo, libro_id)
+                )
+                thread.daemon = True
+                thread.start()
+                logger.info(f"🔄 Hilo de subida a Drive iniciado para libro ID {libro_id}")
+            
             # Autorización
             if 'autorizacion' in request.FILES:
                 nuevo_libro.archivo_autorizacion = request.FILES['autorizacion']
+                nuevo_libro.save()
                 logger.info(f"Archivo de autorización agregado: {request.FILES['autorizacion'].name}")
-            
-            nuevo_libro.save()
 
             # Agregar nuevo autor si se proporcionó
             nuevo_autor_nombre = request.POST.get('nombre_autor')
@@ -155,6 +182,8 @@ def agregar_libro(request):
 @admin_required
 def editar_libro(request, libro_id):
     libro = get_object_or_404(Libro, id_libro=libro_id)
+    categorias = Categoria.objects.all()
+    
     if request.method == 'POST':
         try:
             libro.titulo = request.POST.get('titulo').strip()
@@ -174,21 +203,21 @@ def editar_libro(request, libro_id):
                 tamaño_mb = pdf_original.size / (1024 * 1024)
                 
                 if tamaño_mb > 10:
-                    logger.info(f"📄 PDF grande detectado en edición: {tamaño_mb:.1f}MB. Subiendo a Drive...")
-                    try:
-                        drive_url = subir_pdf_a_drive(pdf_original, libro.titulo)
-                        if drive_url:
-                            libro.google_drive_url = drive_url
-                            libro.pdf = None
-                            messages.success(request, "PDF grande subido a Google Drive")
-                        else:
-                            libro.pdf = pdf_original
-                    except Exception as e:
-                        logger.error(f"Error subiendo a Drive: {e}")
-                        libro.pdf = pdf_original
+                    logger.info(f"📄 PDF grande detectado en edición: {tamaño_mb:.1f}MB. Subiendo a Drive en segundo plano...")
+                    # Guardar el libro primero
+                    libro.save()
+                    # Subir en segundo plano
+                    thread = threading.Thread(
+                        target=subir_pdf_a_drive_async,
+                        args=(pdf_original, libro.titulo, libro.id_libro)
+                    )
+                    thread.daemon = True
+                    thread.start()
+                    messages.info(request, "✅ El PDF se está subiendo a Google Drive en segundo plano.")
                 else:
                     libro.pdf = pdf_original
                     libro.pdf_url = ''
+                    libro.save()
             
             if 'portada' in request.FILES:
                 libro.img_portada = request.FILES['portada']
@@ -204,6 +233,7 @@ def editar_libro(request, libro_id):
             libro.save()
             
             logger.info(f"Libro '{libro.titulo}' actualizado por {request.user.username}")
+            messages.success(request, f'Libro "{libro.titulo}" actualizado')
             return JsonResponse({'success': True, 'message': 'Libro actualizado'})
         except Exception as e:
             logger.error(f"Error editando libro: {str(e)}", exc_info=True)
@@ -212,7 +242,7 @@ def editar_libro(request, libro_id):
     context = {
         'libro': libro,
         'autores': Autor.objects.all(),
-        'categorias': Categoria.objects.all(),
+        'categorias': categorias,
         'palabras_claves': libro.palabra_clave.split(',') if libro.palabra_clave else []
     }
     return render(request, 'editar_libro.html', context)
