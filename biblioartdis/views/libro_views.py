@@ -508,7 +508,7 @@ def actualizar_orden_colecciones(request):
     return JsonResponse({'status': 'error'}, status=400)
 
 
-# ==================== CRUD Imágenes ====================
+# ==================== CRUD Imágenes ======================
 
 @login_required
 @admin_required
