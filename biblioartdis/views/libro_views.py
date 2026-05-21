@@ -219,37 +219,136 @@ def editar_libro(request, libro_id):
 
 
 @login_required
+@admin_required
 def eliminar_libro(request, libro_id):
+    """Elimina un libro del sistema y su PDF de Google Drive"""
     libro = get_object_or_404(Libro, pk=libro_id)
+    
     if request.method == 'POST':
         titulo = libro.titulo
+        
+        # Eliminar PDF de Google Drive si existe
+        if libro.google_drive_url:
+            try:
+                from ..drive_utils import eliminar_pdf_de_drive
+                # Extraer el ID del archivo de la URL
+                file_id = None
+                if '/file/d/' in libro.google_drive_url:
+                    file_id = libro.google_drive_url.split('/file/d/')[1].split('/')[0]
+                elif 'id=' in libro.google_drive_url:
+                    file_id = libro.google_drive_url.split('id=')[1].split('&')[0]
+                
+                if file_id:
+                    resultado = eliminar_pdf_de_drive(file_id)
+                    if resultado:
+                        logger.info(f"✅ PDF eliminado de Google Drive: {file_id}")
+                        messages.success(request, f"PDF eliminado de Google Drive")
+                    else:
+                        logger.warning(f"⚠️ No se pudo eliminar PDF de Drive: {file_id}")
+                else:
+                    logger.warning(f"No se pudo extraer ID de Drive URL: {libro.google_drive_url}")
+            except Exception as e:
+                logger.error(f"Error eliminando PDF de Drive: {e}")
+        
+        # Eliminar archivo de Cloudinary si existe
+        if libro.pdf:
+            try:
+                libro.pdf.delete(save=False)
+                logger.info(f"PDF eliminado de Cloudinary")
+            except Exception as e:
+                logger.error(f"Error eliminando PDF de Cloudinary: {e}")
+        
+        # Eliminar el libro de la base de datos
         libro.delete()
         logger.info(f"Libro '{titulo}' eliminado por {request.user.username}")
+        messages.success(request, f'Libro "{titulo}" eliminado correctamente')
+        
         return redirect('listar_libros')
-
-
-@login_required
-def cambiar_estado_descarga(request, libro_id):
-    libro = get_object_or_404(Libro, id_libro=libro_id)
-    libro.descarga_autorizada = not libro.descarga_autorizada
-    libro.save()
-    logger.info(f"Estado de descarga del libro '{libro.titulo}' cambiado a {libro.descarga_autorizada}")
+    
     return redirect('listar_libros')
 
 
 @login_required
-def eliminar_autorizacion(request, libro_id):
+@admin_required
+def cambiar_estado_descarga(request, libro_id):
+    """Cambia el estado de autorización de descarga del libro"""
     libro = get_object_or_404(Libro, id_libro=libro_id)
-    if request.method == 'POST' and libro.archivo_autorizacion:
-        libro.archivo_autorizacion.delete(save=False)
-        libro.archivo_autorizacion = None
-        libro.save()
-        logger.info(f"Autorización eliminada para libro '{libro.titulo}'")
-        return JsonResponse({'success': True, 'message': 'Autorización eliminada'})
-    return JsonResponse({'success': False, 'message': 'No hay autorización'}, status=405)
+    
+    libro.descarga_autorizada = not libro.descarga_autorizada
+    libro.save()
+    
+    estado = "AUTORIZADA" if libro.descarga_autorizada else "RESTRINGIDA"
+    logger.info(f"Descarga {estado} para '{libro.titulo}' por {request.user.username}")
+    messages.success(request, f'Descarga {estado.lower()} para "{libro.titulo}"')
+    
+    return redirect('listar_libros')
+
+
+@login_required
+def ver_descargar_libro(request, libro_id):
+    libro = get_object_or_404(Libro, id_libro=libro_id)
+    
+    es_admin = hasattr(request.user, 'usuario') and request.user.usuario.tipo_usuario == 'Administrador'
+    es_modo_embed = request.GET.get('embed') == 'true'
+    
+    # Obtener URL del archivo (siempre)
+    archivo_url = libro.get_pdf_display_url()
+    
+    # Si no hay archivo disponible
+    if not archivo_url:
+        return render(request, 'error_recurso.html', {'mensaje': 'No hay archivo disponible.'}, status=404)
+    
+    # Modo embebido - mostrar visor (siempre, independientemente de permisos)
+    if es_modo_embed:
+        # Formatear URL de Google Drive para embebido
+        if 'drive.google.com' in archivo_url:
+            file_id = None
+            if '/file/d/' in archivo_url:
+                file_id = archivo_url.split('/file/d/')[1].split('/')[0]
+            elif 'id=' in archivo_url:
+                file_id = archivo_url.split('id=')[1].split('&')[0]
+            if file_id:
+                archivo_url = f'https://drive.google.com/file/d/{file_id}/preview'
+        
+        return render(request, 'ver_libro_embed.html', {
+            'libro': libro,
+            'archivo_url': archivo_url,
+            'permitir_descarga': libro.descarga_autorizada or es_admin
+        })
+    
+    # Si no tiene permiso de descarga y no es modo embed, mostrar página de restricción
+    if not libro.descarga_autorizada and not es_admin:
+        return render(request, 'acceso_restringido.html', {
+            'libro': libro,
+            'mensaje': 'Este libro tiene restringida su descarga. Solo puedes leerlo dentro del sistema.'
+        })
+    
+    # Modo normal con permiso de descarga - redirigir
+    return redirect(archivo_url)
+
+
+@login_required
+@admin_required
+def eliminar_autorizacion(request, libro_id):
+    """Elimina el archivo de autorización de un libro"""
+    libro = get_object_or_404(Libro, id_libro=libro_id)
+    
+    if request.method == 'POST':
+        if libro.archivo_autorizacion:
+            libro.archivo_autorizacion.delete(save=False)
+            libro.archivo_autorizacion = None
+            libro.save()
+            logger.info(f"Autorización eliminada para '{libro.titulo}'")
+            messages.success(request, f'Autorización eliminada')
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+    
+    return redirect('listar_libros')
 
 
 # ==================== CRUD Revistas ====================
+
 @login_required
 @admin_required
 def listar_revistas(request):
@@ -380,6 +479,7 @@ def actualizar_orden_colecciones(request):
 
 
 # ==================== CRUD Imágenes ====================
+
 @login_required
 @admin_required
 def listar_imagenes(request):
