@@ -22,7 +22,6 @@
         --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
-    /* Hero Section */
     .hero-level {
         background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
         padding: 2.5rem 0;
@@ -74,7 +73,6 @@
         margin-top: 0.5rem;
     }
 
-    /* Grid de libros */
     .books-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -82,7 +80,6 @@
         padding: 1rem 0;
     }
 
-    /* Tarjeta de libro */
     .book-card {
         background: white;
         border-radius: 20px;
@@ -160,7 +157,6 @@
         font-size: 2rem;
     }
 
-    /* Información del libro */
     .book-info {
         padding: 1.2rem;
         flex: 1;
@@ -192,7 +188,6 @@
         line-height: 1.5;
     }
 
-    /* Badges */
     .book-badges {
         display: flex;
         flex-wrap: wrap;
@@ -212,7 +207,11 @@
         color: #0284C7;
     }
 
-    /* Botón de descarga */
+    .badge-drive {
+        background: #E8F5E9;
+        color: #2E7D32;
+    }
+
     .download-link {
         display: inline-flex;
         align-items: center;
@@ -240,7 +239,28 @@
         margin-top: 0.5rem;
     }
 
-    /* Estado vacío */
+    .read-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0.4rem 1rem;
+        background: var(--accent);
+        color: white;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        margin-top: 0.5rem;
+        border: none;
+        cursor: pointer;
+    }
+
+    .read-link:hover {
+        background: var(--accent-hover);
+        transform: translateY(-2px);
+    }
+
     .empty-state {
         text-align: center;
         padding: 3rem;
@@ -324,7 +344,6 @@
         border-radius: 8px;
     }
 
-    /* Responsive */
     @media (max-width: 768px) {
         .books-grid {
             grid-template-columns: 1fr;
@@ -339,7 +358,6 @@
     }
 </style>
 
-<!-- Hero Section -->
 <div class="hero-level">
     <div class="container text-center">
         <div class="level-badge">
@@ -358,25 +376,23 @@
             {% for libro in libros %}
             <div class="book-card">
                 <div class="book-cover-section" 
-                     {% if libro.pdf %}onclick="verPdf('{{ libro.pdf.url }}', '{{ libro.id_libro }}', '{{ libro.descarga_autorizada|yesno:"true,false" }}')"{% endif %}>
-                    {% if libro.pdf or libro.pdf_url %}
-                        {% if libro.img_portada %}
-                            <img class="book-cover" src="{{ libro.img_portada.url }}" alt="{{ libro.titulo }}">
-                        {% else %}
-                            <div class="no-pdf-cover">
-                                <i class="fas fa-book"></i>
-                                <span>Sin portada</span>
-                            </div>
-                        {% endif %}
-                        <div class="pdf-overlay">
-                            <i class="fas fa-file-pdf"></i> Ver PDF
-                        </div>
+                     onclick="abrirLibro({{ libro.id_libro }}, '{{ libro.titulo|escapejs }}', {{ libro.descarga_autorizada|lower }})">
+                    <!-- ✅ CORREGIDO: Mostrar portada si existe cualquier tipo de archivo -->
+                    {% if libro.img_portada %}
+                        <img class="book-cover" src="{{ libro.img_portada.url }}" alt="{{ libro.titulo }}">
                     {% else %}
                         <div class="no-pdf-cover">
-                            <i class="fas fa-ban"></i>
-                            <span>PDF no disponible</span>
+                            <i class="fas fa-book"></i>
+                            <span>Sin portada</span>
                         </div>
                     {% endif %}
+                    <div class="pdf-overlay">
+                        {% if libro.descarga_autorizada %}
+                            <i class="fas fa-download"></i> Descargar
+                        {% else %}
+                            <i class="fas fa-book-open"></i> Leer en línea
+                        {% endif %}
+                    </div>
                 </div>
                 
                 <div class="book-info">
@@ -397,6 +413,11 @@
                                 <i class="fas fa-tag"></i> {{ libro.edicion }}
                             </span>
                         {% endif %}
+                        {% if libro.google_drive_url %}
+                            <span class="badge-custom badge-drive">
+                                <i class="fab fa-google-drive"></i> Google Drive
+                            </span>
+                        {% endif %}
                     </div>
                     
                     {% if libro.descripcion %}
@@ -405,18 +426,14 @@
                         </div>
                     {% endif %}
                     
-                    {% if libro.pdf and libro.descarga_autorizada %}
-                        <a href="{{ libro.pdf.url }}" class="download-link" download>
+                    {% if libro.descarga_autorizada %}
+                        <button class="read-link" onclick="event.stopPropagation(); abrirLibro({{ libro.id_libro }}, '{{ libro.titulo|escapejs }}', true)">
                             <i class="fas fa-download"></i> Descargar PDF
-                        </a>
-                    {% elif libro.pdf_url %}
-                        <a href="{{ libro.pdf_url }}" class="download-link" target="_blank">
-                            <i class="fas fa-external-link-alt"></i> Abrir enlace externo
-                        </a>
-                    {% elif libro.pdf %}
-                        <div class="no-download">
-                            <i class="fas fa-lock"></i> Descarga no autorizada
-                        </div>
+                        </button>
+                    {% else %}
+                        <button class="read-link" onclick="event.stopPropagation(); abrirLibro({{ libro.id_libro }}, '{{ libro.titulo|escapejs }}', false)">
+                            <i class="fas fa-book-open"></i> Leer en línea
+                        </button>
                     {% endif %}
                 </div>
             </div>
@@ -437,7 +454,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-file-pdf text-danger"></i> Visor de PDF
+                    <i class="fas fa-file-pdf text-danger"></i> <span id="modalPdfTitle">Visor de PDF</span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -469,7 +486,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
 <script>
-    // Configurar PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
 
     let pdfDoc = null;
@@ -477,8 +493,8 @@
     let scale = 1.2;
     let canvas = null;
     let ctx = null;
+    let currentLibroId = null;
 
-    // Registrar visita
     function registrarVisita(libroId) {
         fetch("{% url 'registrar_visita_libro' %}", {
             method: 'POST',
@@ -490,31 +506,46 @@
         }).catch(error => console.error('Error:', error));
     }
 
-    // Ver PDF
-    function verPdf(pdfUrl, libroId, tienePermiso) {
+    function abrirLibro(libroId, titulo, permitirDescarga) {
         registrarVisita(libroId);
         
-        if (tienePermiso === true) {
-            window.open(pdfUrl, '_blank');
+        if (permitirDescarga) {
+            window.open("{% url 'ver_descargar_libro' 0 %}".replace('0', libroId), '_blank');
             return;
         }
         
-        // Inicializar canvas
+        document.getElementById('modalPdfTitle').innerText = titulo;
+        
         canvas = document.getElementById('pdfCanvas');
         ctx = canvas.getContext('2d');
         
-        // Cargar PDF
-        pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
-            pdfDoc = pdf;
-            document.getElementById('pageCount').textContent = pdf.numPages;
-            renderPage(pageNum);
-            
-            const modal = new bootstrap.Modal(document.getElementById('pdfModal'));
-            modal.show();
-        }).catch(function(error) {
-            console.error('Error al cargar PDF:', error);
-            alert('No se pudo cargar el PDF. Intente nuevamente.');
-        });
+        const url = "{% url 'ver_descargar_libro' 0 %}".replace('0', libroId) + '?embed=true';
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error('Error al cargar');
+                return response.blob();
+            })
+            .then(blob => {
+                const blobUrl = URL.createObjectURL(blob);
+                return pdfjsLib.getDocument(blobUrl).promise;
+            })
+            .then(function(pdf) {
+                pdfDoc = pdf;
+                document.getElementById('pageCount').textContent = pdf.numPages;
+                pageNum = 1;
+                renderPage(pageNum);
+                
+                const modal = new bootstrap.Modal(document.getElementById('pdfModal'));
+                modal.show();
+            })
+            .catch(function(error) {
+                console.error('Error al cargar PDF:', error);
+                alert('No se pudo cargar el PDF. El libro puede estar en Google Drive y requiere acceso externo.');
+                
+                // Redirigir a la vista normal
+                window.open("{% url 'ver_descargar_libro' 0 %}".replace('0', libroId) + '?embed=true', '_blank');
+            });
     }
 
     function renderPage(num) {
@@ -535,7 +566,6 @@
         });
     }
 
-    // Configurar controles después de que el DOM esté listo
     document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('prevPage')?.addEventListener('click', () => {
             if (pageNum > 1) {
@@ -563,11 +593,11 @@
             }
         });
         
-        // Resetear al cerrar modal
         document.getElementById('pdfModal')?.addEventListener('hidden.bs.modal', function() {
             pdfDoc = null;
             pageNum = 1;
             scale = 1.2;
+            currentLibroId = null;
         });
     });
 </script>
