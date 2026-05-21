@@ -16,7 +16,7 @@ from .usuario_views import (
     novedades_libros, libros_nivel, catalogo, sugerir_libro,
     listar_sugerencias_usuario, descartar_sugerencia, ver_pdf,
     galeria_artistica, ver_imagen, buscar_libros, chatbot_view,
-    obtener_novedades, chat_con_gemini  # ✅ Verifica que está aquí
+    obtener_novedades, chat_con_gemini
 )
 from .libro_views import (
     listar_libros, agregar_libro, editar_libro, eliminar_libro,
@@ -24,7 +24,8 @@ from .libro_views import (
     listar_revistas, agregar_revista, modificar_revista, eliminar_revista,
     agregar_coleccion, modificar_coleccion, eliminar_coleccion,
     actualizar_orden_colecciones,
-    listar_imagenes, agregar_imagen, editar_imagen, eliminar_imagen, editar_marca
+    listar_imagenes, agregar_imagen, editar_imagen, eliminar_imagen, editar_marca,
+    ver_descargar_libro  # ⭐ NUEVA FUNCIÓN PARA VER/DESCARGAR LIBROS
 )
 
 __all__ = [
@@ -43,7 +44,7 @@ __all__ = [
     'novedades_libros', 'libros_nivel', 'catalogo', 'sugerir_libro',
     'listar_sugerencias_usuario', 'descartar_sugerencia', 'ver_pdf',
     'galeria_artistica', 'ver_imagen', 'buscar_libros', 'chatbot_view',
-    'obtener_novedades', 'chat_con_gemini',  # ✅ Verifica que está aquí
+    'obtener_novedades', 'chat_con_gemini',
     
     # Libro views
     'listar_libros', 'agregar_libro', 'editar_libro', 'eliminar_libro',
@@ -51,5 +52,6 @@ __all__ = [
     'listar_revistas', 'agregar_revista', 'modificar_revista', 'eliminar_revista',
     'agregar_coleccion', 'modificar_coleccion', 'eliminar_coleccion',
     'actualizar_orden_colecciones',
-    'listar_imagenes', 'agregar_imagen', 'editar_imagen', 'eliminar_imagen', 'editar_marca'
+    'listar_imagenes', 'agregar_imagen', 'editar_imagen', 'eliminar_imagen', 'editar_marca',
+    'ver_descargar_libro'  # ⭐ NUEVA FUNCIÓN
 ]

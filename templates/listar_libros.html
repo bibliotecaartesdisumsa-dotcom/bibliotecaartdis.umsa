@@ -302,6 +302,7 @@
         font-size: 0.75rem;
         color: var(--text-primary);
         transition: all 0.2s;
+        cursor: pointer;
     }
 
     .file-link:hover {
@@ -311,6 +312,50 @@
 
     .file-link i {
         font-size: 0.8rem;
+    }
+
+    .btn-download {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success);
+    }
+
+    .btn-download:hover {
+        background: var(--success);
+        color: white;
+    }
+
+    .btn-view {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--info);
+    }
+
+    .btn-view:hover {
+        background: var(--info);
+        color: white;
+    }
+
+    /* Modal visor PDF */
+    .pdf-modal .modal-dialog {
+        max-width: 95%;
+        margin: 1rem auto;
+    }
+    
+    .pdf-modal .modal-content {
+        background: #1a1a2e;
+        border-radius: 16px;
+        height: 90vh;
+    }
+    
+    .pdf-modal .modal-body {
+        padding: 0;
+        height: calc(90vh - 60px);
+    }
+    
+    .pdf-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: 0 0 16px 16px;
     }
 
     /* Paginación */
@@ -358,6 +403,26 @@
         color: white;
     }
 
+    /* Badge de estado */
+    .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 20px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+    
+    .status-authorized {
+        background: rgba(16, 185, 129, 0.1);
+        color: var(--success);
+    }
+    
+    .status-restricted {
+        background: rgba(245, 158, 11, 0.1);
+        color: var(--warning);
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
         .filters-bar {
@@ -372,6 +437,14 @@
         }
         .btn-action {
             justify-content: center;
+        }
+        .pdf-modal .modal-dialog {
+            max-width: 100%;
+            margin: 0;
+        }
+        .pdf-modal .modal-content {
+            height: 100vh;
+            border-radius: 0;
         }
     }
 </style>
@@ -420,7 +493,7 @@
                     <th>Edición</th>
                     <th>Categorías</th>
                     <th>Fecha</th>
-                    <th>Archivos</th>
+                    <th>Acceso al Libro</th>
                     <th style="text-align: center;">Acciones</th>
                 </tr>
             </thead>
@@ -440,7 +513,18 @@
                             </div>
                         {% endif %}
                     </td>
-                    <td><strong>{{ libro.titulo|truncatechars:50 }}</strong></td>
+                    <td style="min-width: 200px;">
+                        <strong>{{ libro.titulo|truncatechars:50 }}</strong>
+                        {% if libro.descarga_autorizada %}
+                            <span class="status-badge status-authorized">
+                                <i class="fas fa-check-circle"></i> Descarga permitida
+                            </span>
+                        {% else %}
+                            <span class="status-badge status-restricted">
+                                <i class="fas fa-eye"></i> Solo lectura
+                            </span>
+                        {% endif %}
+                    </td>
                     <td>
                         <span class="badge-category" style="background: #E0F2FE; color: #0284C7;">
                             <i class="fas fa-tag"></i> {{ libro.tipo }}
@@ -471,25 +555,33 @@
                         {% endfor %}
                     </td>
                     <td>{{ libro.fecha_publicacion|date:"d/m/Y" }}</td>
+                    <!-- Columna de Acceso al Libro -->
                     <td>
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            {% if libro.pdf %}
-                                <a href="{{ libro.pdf.url }}" target="_blank" class="file-link">
-                                    <i class="fas fa-file-pdf" style="color: #EF4444;"></i> Ver PDF
-                                </a>
-                            {% endif %}
-                            {% if libro.pdf_url %}
-                                <a href="{{ libro.pdf_url }}" target="_blank" class="file-link">
-                                    <i class="fas fa-external-link-alt" style="color: var(--info);"></i> Enlace externo
-                                </a>
-                            {% endif %}
-                            {% if not libro.pdf and not libro.pdf_url %}
-                                <span class="file-link" style="background: none; color: var(--text-secondary);">
+                            {% if libro.pdf or libro.pdf_url or libro.google_drive_url %}
+                                {% if libro.descarga_autorizada %}
+                                    <!-- Modo DESCARGAR: enlace directo para descargar -->
+                                    <a href="{% url 'ver_descargar_libro' libro.id_libro %}" 
+                                       class="file-link btn-download" 
+                                       target="_blank">
+                                        <i class="fas fa-download"></i> Descargar PDF
+                                    </a>
+                                {% else %}
+                                    <!-- Modo SOLO LECTURA: abrir en modal/visor del sistema -->
+                                    <button type="button" 
+                                            class="file-link btn-view" 
+                                            onclick="abrirVisorPDF('{{ libro.id_libro }}', '{{ libro.titulo|escapejs }}')">
+                                        <i class="fas fa-eye"></i> Leer en línea
+                                    </button>
+                                {% endif %}
+                            {% else %}
+                                <span class="file-link" style="background: none; color: var(--text-secondary); cursor: not-allowed;">
                                     <i class="fas fa-ban"></i> No disponible
                                 </span>
                             {% endif %}
                         </div>
                     </td>
+                    <!-- Columna de Acciones -->
                     <td>
                         <div class="action-buttons">
                             <a href="{% url 'editar_libro' libro.id_libro %}" class="btn-action btn-edit" title="Editar">
@@ -501,20 +593,19 @@
                                     <i class="fas fa-trash-alt"></i> Eliminar
                                 </button>
                             </form>
-                            {% if libro.pdf.name %}
-                                <form method="post" action="{% url 'cambiar_estado_descarga' libro.id_libro %}" class="d-inline">
-                                    {% csrf_token %}
-                                    {% if libro.descarga_autorizada %}
-                                        <button type="submit" class="btn-action btn-restrict" title="Restringir descarga">
-                                            <i class="fas fa-lock"></i> Restringir
-                                        </button>
-                                    {% else %}
-                                        <button type="submit" class="btn-action btn-authorize" title="Autorizar descarga">
-                                            <i class="fas fa-unlock-alt"></i> Autorizar
-                                        </button>
-                                    {% endif %}
-                                </form>
-                            {% endif %}
+                            <!-- Botón Restringir/Autorizar - SIEMPRE VISIBLE -->
+                            <form method="post" action="{% url 'cambiar_estado_descarga' libro.id_libro %}" class="d-inline">
+                                {% csrf_token %}
+                                {% if libro.descarga_autorizada %}
+                                    <button type="submit" class="btn-action btn-restrict" title="Restringir descarga (solo lectura)">
+                                        <i class="fas fa-lock"></i> Restringir
+                                    </button>
+                                {% else %}
+                                    <button type="submit" class="btn-action btn-authorize" title="Autorizar descarga">
+                                        <i class="fas fa-unlock-alt"></i> Autorizar
+                                    </button>
+                                {% endif %}
+                            </form>
                         </div>
                     </td>
                 </tr>
@@ -587,8 +678,43 @@
     </div>
 </div>
 
+<!-- Modal para visor de PDF (solo lectura) -->
+<div id="visorPDFModal" class="modal fade pdf-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background: var(--primary-dark); border-bottom: 1px solid var(--accent);">
+                <h5 class="modal-title" style="color: white;">
+                    <i class="fas fa-book-open"></i> <span id="pdfTituloLibro"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <iframe id="pdfIframe" class="pdf-iframe" src=""></iframe>
+            </div>
+            <div class="modal-footer" style="background: var(--bg-light);">
+                <small class="text-muted">
+                    <i class="fas fa-info-circle"></i> Modo solo lectura - Para descargar contacta al bibliotecario
+                </small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    // Variables globales para los modales
+    let portadaModal;
+    let visorPDFModal;
+    
+    // Inicializar modales cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', function() {
+        portadaModal = new bootstrap.Modal(document.getElementById('portadaModal'));
+        visorPDFModal = new bootstrap.Modal(document.getElementById('visorPDFModal'));
+    });
+    
     // Búsqueda en tiempo real
     document.getElementById('searchInput').addEventListener('keyup', function() {
         const input = this.value.toLowerCase();
@@ -599,14 +725,31 @@
             row.style.display = text.includes(input) ? '' : 'none';
         });
     });
-
+    
     // Mostrar portada en modal
     window.mostrarPortada = function(url, titulo) {
-        const modal = new bootstrap.Modal(document.getElementById('portadaModal'));
         document.getElementById('portadaImagen').src = url;
-        modal.show();
+        portadaModal.show();
     };
-
+    
+    // Abrir visor de PDF (modo solo lectura)
+    window.abrirVisorPDF = function(libroId, titulo) {
+        // Mostrar título en el modal
+        document.getElementById('pdfTituloLibro').innerText = titulo;
+        
+        // Cargar el PDF en el iframe usando la vista protegida con parámetro embed
+        const pdfUrl = "{% url 'ver_descargar_libro' 0 %}".replace('0', libroId) + '?embed=true';
+        document.getElementById('pdfIframe').src = pdfUrl;
+        
+        // Abrir el modal
+        visorPDFModal.show();
+    };
+    
+    // Limpiar iframe al cerrar el modal para detener la carga
+    document.getElementById('visorPDFModal').addEventListener('hidden.bs.modal', function () {
+        document.getElementById('pdfIframe').src = '';
+    });
+    
     // Confirmar eliminación
     document.querySelectorAll('.eliminar-form').forEach(form => {
         form.addEventListener('submit', function(e) {
