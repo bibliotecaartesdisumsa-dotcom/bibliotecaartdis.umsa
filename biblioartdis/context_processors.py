@@ -12,7 +12,7 @@ def user_info(request):
     usuario = None
     if request.user.is_authenticated:
         try:
-            # CORRECCIÓN: Usar user directamente, no correo
+            # CORRECCIÓN: Usar user directamente, no correo___
             # El perfil Usuario está relacionado por OneToOneField con User
             usuario = request.user.usuario  # Más eficiente que buscar por correo
         except Usuario.DoesNotExist:
