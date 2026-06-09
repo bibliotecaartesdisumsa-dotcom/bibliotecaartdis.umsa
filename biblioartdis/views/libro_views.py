@@ -523,11 +523,19 @@ def listar_imagenes(request):
 @admin_required
 def agregar_imagen(request):
     categorias = Categoria.objects.all()
+    
     if request.method == 'POST':
         try:
             titulo = request.POST.get('titulo')
             descripcion = request.POST.get('descripcion', '')
             autorImg = request.POST.get('autorImg')
+            
+            # Validaciones
+            if not titulo:
+                messages.error(request, 'El título es obligatorio')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'success': False, 'error': 'El título es obligatorio'}, status=400)
+                return redirect('agregar_imagen')
             
             nueva_imagen = Imagen(
                 titulo=titulo,
@@ -535,13 +543,31 @@ def agregar_imagen(request):
                 autorImg=autorImg,
             )
             
+            # Validar y procesar imagen
             if 'img_portada' in request.FILES:
-                nueva_imagen.img_portada = request.FILES['img_portada']
+                imagen = request.FILES['img_portada']
+                # Validar tamaño (5MB máximo)
+                if imagen.size > 5 * 1024 * 1024:
+                    error_msg = 'La imagen no puede superar los 5MB'
+                    messages.error(request, error_msg)
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
+                    return redirect('agregar_imagen')
+                nueva_imagen.img_portada = imagen
+            
             if 'pdf' in request.FILES:
-                nueva_imagen.pdf = request.FILES['pdf']
+                pdf = request.FILES['pdf']
+                if pdf.size > 10 * 1024 * 1024:
+                    error_msg = 'El PDF no puede superar los 10MB'
+                    messages.error(request, error_msg)
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
+                    return redirect('agregar_imagen')
+                nueva_imagen.pdf = pdf
             
             nueva_imagen.save()
             
+            # Agregar categorías
             categorias_seleccionadas = request.POST.getlist('categorias')
             for cat_id in categorias_seleccionadas:
                 try:
@@ -551,15 +577,22 @@ def agregar_imagen(request):
                     pass
             
             messages.success(request, 'Imagen agregada correctamente')
+            
+            # Para solicitudes AJAX
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True, 'message': 'Imagen agregada', 'id': nueva_imagen.id_Imagen})
+            
             return redirect('lista_imagenes')
             
         except Exception as e:
-            logger.error(f"Error agregando imagen: {str(e)}")
-            messages.error(request, f'Error: {str(e)}')
-            return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': str(e)})
+            logger.error(f"Error agregando imagen: {str(e)}", exc_info=True)
+            error_msg = str(e)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': error_msg}, status=500)
+            messages.error(request, f'Error: {error_msg}')
+            return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': error_msg})
     
     return render(request, 'agregar_imagen.html', {'categorias': categorias})
-
 
 @login_required
 @admin_required
