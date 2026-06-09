@@ -524,6 +524,9 @@ def listar_imagenes(request):
 def agregar_imagen(request):
     categorias = Categoria.objects.all()
     
+    # Detectar si es una petición AJAX
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
     if request.method == 'POST':
         try:
             titulo = request.POST.get('titulo')
@@ -532,10 +535,16 @@ def agregar_imagen(request):
             
             # Validaciones
             if not titulo:
-                messages.error(request, 'El título es obligatorio')
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                if is_ajax:
                     return JsonResponse({'success': False, 'error': 'El título es obligatorio'}, status=400)
-                return redirect('agregar_imagen')
+                messages.error(request, 'El título es obligatorio')
+                return render(request, 'agregar_imagen.html', {'categorias': categorias})
+            
+            if not autorImg:
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': 'El autor es obligatorio'}, status=400)
+                messages.error(request, 'El autor es obligatorio')
+                return render(request, 'agregar_imagen.html', {'categorias': categorias})
             
             nueva_imagen = Imagen(
                 titulo=titulo,
@@ -543,57 +552,57 @@ def agregar_imagen(request):
                 autorImg=autorImg,
             )
             
-            # Validar y procesar imagen
+            # Procesar imagen
             if 'img_portada' in request.FILES:
                 imagen = request.FILES['img_portada']
-                # Validar tamaño (5MB máximo)
+                # Validar tamaño (5MB)
                 if imagen.size > 5 * 1024 * 1024:
-                    error_msg = 'La imagen no puede superar los 5MB'
-                    messages.error(request, error_msg)
-                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
-                    return redirect('agregar_imagen')
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': 'La imagen no puede superar los 5MB'}, status=400)
+                    messages.error(request, 'La imagen no puede superar los 5MB')
+                    return render(request, 'agregar_imagen.html', {'categorias': categorias})
                 nueva_imagen.img_portada = imagen
             
             if 'pdf' in request.FILES:
                 pdf = request.FILES['pdf']
                 if pdf.size > 10 * 1024 * 1024:
-                    error_msg = 'El PDF no puede superar los 10MB'
-                    messages.error(request, error_msg)
-                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
-                    return redirect('agregar_imagen')
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': 'El PDF no puede superar los 10MB'}, status=400)
+                    messages.error(request, 'El PDF no puede superar los 10MB')
+                    return render(request, 'agregar_imagen.html', {'categorias': categorias})
                 nueva_imagen.pdf = pdf
             
             nueva_imagen.save()
             
             # Agregar categorías
-            categorias_seleccionadas = request.POST.getlist('categorias')
-            for cat_id in categorias_seleccionadas:
+            for cat_id in request.POST.getlist('categorias'):
                 try:
                     categoria = Categoria.objects.get(pk=cat_id)
                     nueva_imagen.categorias.add(categoria)
                 except:
                     pass
             
+            # ✅ PARA AJAX: Devolver JSON (esto es lo que espera tu JavaScript)
+            if is_ajax:
+                return JsonResponse({
+                    'success': True, 
+                    'message': 'Imagen agregada correctamente',
+                    'id': nueva_imagen.id_Imagen
+                })
+            
+            # Para peticiones normales (no AJAX)
             messages.success(request, 'Imagen agregada correctamente')
-            
-            # Para solicitudes AJAX
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'success': True, 'message': 'Imagen agregada', 'id': nueva_imagen.id_Imagen})
-            
             return redirect('lista_imagenes')
             
         except Exception as e:
             logger.error(f"Error agregando imagen: {str(e)}", exc_info=True)
-            error_msg = str(e)
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'success': False, 'error': error_msg}, status=500)
-            messages.error(request, f'Error: {error_msg}')
-            return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': error_msg})
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': str(e)}, status=500)
+            messages.error(request, f'Error: {str(e)}')
+            return render(request, 'agregar_imagen.html', {'categorias': categorias, 'error': str(e)})
     
     return render(request, 'agregar_imagen.html', {'categorias': categorias})
-
+    
 @login_required
 @admin_required
 def editar_imagen(request, id_imagen):
